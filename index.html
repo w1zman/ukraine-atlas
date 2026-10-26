@@ -64,6 +64,12 @@ a{color:var(--sky)}
 .iconbtn{flex:none;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;cursor:pointer;padding:0;color:var(--text)}
 .iconbtn svg{width:18px;height:18px}
 .iconbtn:hover{border-color:var(--edge)}
+#fsAlerts{position:absolute;z-index:8;top:10px;right:calc(max(16px,env(safe-area-inset-right,0px)) + 52px);height:44px;max-width:calc(100% - 100px)}
+#fsCard{position:absolute;z-index:8;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));bottom:12px;max-height:48%;overflow-y:auto;overscroll-behavior:contain;border-radius:16px;padding:12px 16px 16px;background:var(--panel);border:1px solid var(--line);box-shadow:0 14px 40px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:12px;box-sizing:border-box}
+#fsCard .cardx{position:sticky;top:0;align-self:flex-end;margin-bottom:-46px;z-index:1;width:36px;height:36px;background:var(--panel-2);border:1px solid var(--line)}
+#fsCard h2{padding-right:44px}
+body.fs .amenu{right:max(16px,env(safe-area-inset-right,0px))}
+@media (min-width:900px){#fsCard{left:auto;width:400px;max-height:70%}}
 #fsClose{position:absolute;z-index:8;top:10px;right:max(16px,env(safe-area-inset-right,0px));width:44px;height:44px}
 body.fs .top,body.fs .panel{display:none}
 .modes{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;
@@ -223,6 +229,8 @@ h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02
   </aside>
   <div class="tip glass" id="tip" hidden></div>
   <div class="amenu" id="alertMenu" role="dialog" aria-label="Live alerts" hidden></div>
+  <button class="pill glass" id="fsAlerts" data-s="loading" aria-haspopup="dialog" aria-controls="alertMenu" hidden><span class="dot" aria-hidden="true"></span><span class="ptxt">Alerts</span></button>
+  <section class="fscard" id="fsCard" aria-label="Alert details" hidden></section>
   <button class="iconbtn glass" id="fsClose" aria-label="Close full screen" title="Close full screen" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 </div>
 
@@ -432,7 +440,7 @@ let map = null, mapReady = false;
 const markers = {regions: [], refugees: [], aid: [], blacksea: []};
 
 function padding() {
-  if (document.body.classList.contains('fs')) return {top: 64, bottom: 24, left: 16, right: 16};
+  if (document.body.classList.contains('fs')) { const c = document.getElementById('fsCard'); const ch = c && !c.hidden ? c.getBoundingClientRect().height : 0; return isWide() ? {top: 64, bottom: 24, left: 16, right: ch ? 432 : 16} : {top: 64, bottom: ch ? ch + 20 : 24, left: 16, right: 16}; }
   const top = ($('.top').getBoundingClientRect().bottom || 90) + 8;
   if (isWide()) return {top: Math.min(top, 120), bottom: 24, left: 24, right: 404};
   return {top, bottom: panel.getBoundingClientRect().height + 8, left: 12, right: 12};
@@ -685,6 +693,8 @@ function applyAlerts() {
   else if (n === 0) say('clear', 'No regional alerts', 'No alerts');
   else say('alert', `${n} region${n === 1 ? '' : 's'} under alert` + (full && full < n ? ` · ${full} in full` : ''), `${n} on alert`);
   pill.title = L.updated ? `Updated ${kyivTime(L.updated)} Kyiv time` : '';
+  const fa = document.getElementById('fsAlerts');
+  if (fa) { fa.dataset.s = pill.dataset.s; fa.querySelector('.ptxt').innerHTML = txt.innerHTML; fa.setAttribute('aria-label', 'Show alerts: ' + (pill.getAttribute('aria-label') || '')); }
   if (!mapReady) return;
   for (const id in R) map.setFeatureState({source: 'regions', id}, {alert: state.liveOn ? alertCode(L.alerts[id]) : 0});
 }
@@ -889,12 +899,20 @@ function renderPanel() {
   pbody.innerHTML = PANELS[state.mode]();
   pbody.scrollTop = sameMode ? keep : 0;
   renderPanel.last = state.mode + '|' + state.selected;
+  renderFsCard();
+}
+function renderFsCard() {
+  const card = document.getElementById('fsCard');
+  if (!card) return;
+  const on = document.body.classList.contains('fs') && !!state.focusItem && state.mode === 'regions';
+  card.hidden = !on;
+  if (on) { card.innerHTML = `<button class="iconbtn cardx" data-action="unfocus" aria-label="Close details"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>` + panelFocus(); card.scrollTop = 0; }
 }
 
 /* ---------------- Live feed details: places, threats, messages ---------------- */
 const GAZ = JSON.parse(document.getElementById('gaz').textContent).map(r => ({n: r[0], k: norm(r[0]), ll: [r[1], r[2]], rid: r[3]}));
 function norm(s) { return String(s).normalize('NFKD').toLowerCase().replace(/[^a-z]/g, '').replace(/y/g, 'i'); }
-const ALIASES = [['zaporizk', 'zaporizhzhia'], ['dniprovsk', 'dnipro'], ['sumsk', 'sumi'], ['odesk', 'odesa'], ['podilsk', 'podilsk'], ['zviahel', 'zviahel'], ['sheptitsk', 'sheptitskii']];
+const ALIASES = [['krivorizk', 'krivirih'], ['zaporizk', 'zaporizhzhia'], ['dniprovsk', 'dnipro'], ['sumsk', 'sumi'], ['odesk', 'odesa'], ['podilsk', 'podilsk'], ['zviahel', 'zviahel'], ['sheptitsk', 'sheptitskii']];
 const cleanName = s => String(s).replace(/^(m\.|smt|s\.|selyshche|selo)\s+/i, '').replace(/\s+(raion|district|hromada|community|oblast|region)$/i, '').trim();
 function lookup(name, rid) {
   let k = norm(cleanName(name));
@@ -905,7 +923,7 @@ function lookup(name, rid) {
     if (rid && g.rid !== rid && !(rid === 'UA-32' && g.rid === 'UA-30')) continue;
     let cp = 0; const L = Math.min(k.length, g.k.length);
     while (cp < L && k[cp] === g.k[cp]) cp++;
-    if (cp < Math.max(4, g.k.length - 2) || cp < g.k.length * 0.6 || k.length - cp > 6) continue;
+    if (cp < Math.max(4, g.k.length - 3) || cp < g.k.length * 0.7 || k.length - cp > 6) continue;
     const sc = cp * 10 - Math.abs(k.length - g.k.length);
     if (sc > bs) { bs = sc; best = g; }
   }
@@ -1092,11 +1110,12 @@ function focusItem(id) {
   if (state.mode !== 'regions') setMode('regions', false);
   if (state.selected) setSelected(null, false, true);
   state.focusItem = it;
+  renderPanel();
   if (mapReady) {
     map.getSource('focus').setData(fc([featureOf({type: 'Point', coordinates: it.ll}), featureOf(hexagon(it.ll, it.prec === 'place' ? 1.6 : 4))]));
     if (focusMarker) focusMarker.remove();
     const el = document.createElement('div'); el.className = 'mlabel focus-label';
-    el.textContent = it.prec === 'place' ? (it.kind === 'alert' ? it.title : (it.placeName ? cleanName(it.placeName) : it.title)) : R[it.rid].n;
+    el.textContent = it.kind === 'alert' ? it.title : it.prec === 'place' ? (it.placeName ? cleanName(it.placeName) : it.title) : R[it.rid].n;
     focusMarker = new maplibregl.Marker({element: el, anchor: 'bottom', offset: [0, -16]}).setLngLat(it.ll).addTo(map);
     const z = it.rid === 'UA-30' && it.prec === 'place' ? 9.6 : it.prec === 'place' ? 8.4 : 6.6;
     const o = {center: it.ll, zoom: z, pitch: 55, bearing: map.getBearing(), padding: padding()};
@@ -1171,7 +1190,7 @@ function renderMenu() {
 }
 function openMenu() {
   renderMenu();
-  menu.style.top = ($('.bar').getBoundingClientRect().bottom + 8) + 'px';
+  menu.style.top = (document.body.classList.contains('fs') ? 62 : $('.bar').getBoundingClientRect().bottom + 8) + 'px';
   menu.hidden = false;
   $('#livePill').setAttribute('aria-expanded', 'true');
 }
@@ -1185,7 +1204,7 @@ menu.addEventListener('click', e => {
   if (b.dataset.action === 'retry') { state.live.status = 'loading'; applyAlerts(); renderMenu(); refreshAlerts(); }
   if (b.dataset.action === 'liveon') { state.liveOn = true; state.live.status = 'loading'; applyAlerts(); renderMenu(); renderPanel(); refreshAlerts(); }
 });
-document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target) && !e.target.closest('#livePill')) closeMenu(); });
+document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target) && !e.target.closest('#livePill, #fsAlerts')) closeMenu(); });
 addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { closeMenu(); $('#livePill').focus(); } });
 
 
@@ -1241,7 +1260,7 @@ $('#grip').addEventListener('click', () => {
   $('#grip').setAttribute('aria-expanded', String(ex));
 });
 panel.addEventListener('transitionend', e => { if (e.propertyName === 'max-height' && mapReady && !isWide()) map.easeTo({padding: padding(), duration: REDUCED ? 0 : 300}); });
-pbody.addEventListener('click', e => {
+const onPanelClick = e => {
   const itm = e.target.closest('[data-item]');
   if (itm) { focusItem(itm.dataset.item); return; }
   const reg = e.target.closest('[data-region]');
@@ -1280,7 +1299,10 @@ pbody.addEventListener('click', e => {
       setFrontIdx(n);
     }, REDUCED ? 2000 : 900);
   }
-});
+};
+pbody.addEventListener('click', onPanelClick);
+document.getElementById('fsCard').addEventListener('click', onPanelClick);
+document.getElementById('fsAlerts').addEventListener('click', () => { menu.hidden ? openMenu() : closeMenu(); });
 pbody.addEventListener('input', e => {
   if (e.target.id === 'frontSlider') { stopPlay(); state.frontIdx = +e.target.value; setOcc(state.frontIdx); if (mapReady) map.setLayoutProperty('occ-latest', 'visibility', state.frontIdx === DATA.front.snapshots.length - 1 ? 'none' : 'visible'); }
   if (e.target.id === 'nightOpacity') { state.night.opacity = +e.target.value; if (mapReady && map.getLayer('night')) map.setPaintProperty('night', 'raster-opacity', state.night.opacity); }
@@ -1298,6 +1320,9 @@ function setFullscreen(on) {
   if (document.body.classList.contains('fs') === on) return;
   document.body.classList.toggle('fs', on);
   $('#fsClose').hidden = !on;
+  $('#fsAlerts').hidden = !on;
+  closeMenu();
+  renderFsCard();
   tip.hidden = true;
   const root = document.documentElement;
   try {
