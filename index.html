@@ -105,6 +105,10 @@ body.fs .modes::after{display:none}
 .rbar .rsum{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--muted);padding:0 4px}
 .rbar .rsum b{color:var(--text);font-family:var(--f-display);font-weight:500;font-size:14px;display:block}
 @media (min-width:900px){.rbar{max-width:420px}}
+.lbar{position:absolute;z-index:7;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));bottom:12px;border-radius:14px;padding:10px 12px;box-sizing:border-box}
+.lbar .legend{gap:6px 14px;color:var(--text)}
+.lbar .legend .ring{width:12px;height:12px;border-radius:50%;border:2px solid var(--alert);box-sizing:border-box;display:inline-block}
+@media (min-width:900px){.lbar{right:auto;max-width:520px}}
 .tbar.docked{position:relative;left:auto;right:auto;bottom:auto;flex:none;max-width:none;margin:2px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));background:var(--panel-2);border-color:var(--line);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
 @media (min-width:900px){.tbar.docked{margin:16px 20px 0}}
 #fsClose{position:absolute;z-index:8;top:10px;right:max(16px,env(safe-area-inset-right,0px));width:44px;height:44px}
@@ -280,6 +284,9 @@ h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02
   <div class="amenu" id="alertMenu" role="dialog" aria-label="Live alerts" hidden></div>
   <button class="pill glass" id="fsAlerts" data-s="loading" aria-haspopup="dialog" aria-controls="alertMenu" hidden><span class="dot" aria-hidden="true"></span><span class="ptxt">Alerts</span></button>
   <section class="fscard" id="fsCard" aria-label="Alert details" hidden></section>
+  <div class="lbar glass" id="lbar" aria-label="Colour key" hidden>
+    <div class="legend"><span><i class="sw" style="background:var(--alert)"></i>Missile level</span><span><i class="sw" style="background:var(--drone)"></i>Drone level</span><span><i class="sw" style="background:var(--alert-soft)"></i>Part of region</span><span><i class="sw" style="background:var(--occ)"></i>Occupied (DeepState)</span><span><i class="ring"></i>District under alert</span><span><i class="sw" style="background:#ffb347;border-radius:50%"></i>Explosions reported</span></div>
+  </div>
   <div class="rbar glass" id="rbar" role="group" aria-label="Refugees or aid" hidden>
     <div class="seg" role="group" aria-label="Show"><button data-rv="refugees">Refugees</button><button data-rv="aid">Aid</button></div>
     <div class="rsum" id="rsum"></div>
@@ -503,7 +510,7 @@ let map = null, mapReady = false;
 const markers = {regions: [], refugees: [], aid: [], blacksea: []};
 
 function padding() {
-  if (document.body.classList.contains('fs')) { const c = document.getElementById('fsCard'); const ch = c && !c.hidden ? c.getBoundingClientRect().height : 0; const topFs = Math.max(116, document.querySelector('.modes').getBoundingClientRect().bottom + 10); const tbh = ['tbar', 'nbar', 'rbar'].map(x => document.getElementById(x)).filter(x => x && !x.hidden).reduce((h, x) => h + x.getBoundingClientRect().height + 12, 0); return isWide() ? {top: topFs, bottom: 24 + tbh, left: 16, right: ch ? 432 : 16} : {top: topFs, bottom: (ch ? ch + 20 : 24) + tbh, left: 16, right: 16}; }
+  if (document.body.classList.contains('fs')) { const c = document.getElementById('fsCard'); const ch = c && !c.hidden ? c.getBoundingClientRect().height : 0; const topFs = Math.max(116, document.querySelector('.modes').getBoundingClientRect().bottom + 10); const tbh = ['tbar', 'nbar', 'rbar', 'lbar'].map(x => document.getElementById(x)).filter(x => x && !x.hidden).reduce((h, x) => h + x.getBoundingClientRect().height + 12, 0); return isWide() ? {top: topFs, bottom: 24 + tbh, left: 16, right: ch ? 432 : 16} : {top: topFs, bottom: (ch ? ch + 20 : 24) + tbh, left: 16, right: 16}; }
   const top = ($('.top').getBoundingClientRect().bottom || 90) + 8;
   if (isWide()) return {top: Math.min(top, 120), bottom: 24, left: 24, right: 404};
   return {top, bottom: panel.getBoundingClientRect().height + 8, left: 12, right: 12};
@@ -1099,6 +1106,11 @@ function renderPanel() {
   updateTbar();
   updateNbar();
   updateRbar();
+  updateLbar();
+}
+function updateLbar() {
+  const lb = document.getElementById('lbar');
+  if (lb) lb.hidden = !(document.body.classList.contains('fs') && state.mode === 'regions' && !state.focusItem);
 }
 function updateRbar() {
   const rb = document.getElementById('rbar');
@@ -1724,6 +1736,7 @@ function setFullscreen(on) {
   placeTbar();
   updateNbar();
   updateRbar();
+  updateLbar();
   tip.hidden = true;
   const root = document.documentElement;
   try {
