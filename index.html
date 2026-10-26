@@ -86,7 +86,9 @@ body.fs .tbar{right:max(16px,env(safe-area-inset-right,0px))}
 .nrow .iconbtn{width:40px;height:40px;border-radius:10px;font-size:20px;line-height:1;background:var(--panel-2);border:1px solid var(--line)}
 .nrow .iconbtn:disabled{opacity:.35;cursor:default}
 .nbar .date.dim{color:var(--faint)}
-.nbar .date{width:100%;box-sizing:border-box;height:40px;text-align:center;font-family:var(--f-display);font-size:14px;min-width:0}
+.nbar .date{display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box;height:40px;margin:0;padding:0 6px;text-align:center;font-family:var(--f-display);font-size:16px;-webkit-appearance:none;appearance:none}
+.nbar .date::-webkit-date-and-time-value{text-align:center}
+.nrow>*{min-width:0}
 .nbar .seg button{padding:6px 8px}
 @media (min-width:900px){.nbar{right:404px;max-width:420px;bottom:16px}}
 body.fs .nbar{right:max(16px,env(safe-area-inset-right,0px))}
@@ -860,7 +862,10 @@ function panelNight() {
   return `<div><div class="eyebrow">NASA · VIIRS Day/Night Band</div><h2>Night lights from space</h2></div>
     <p class="lead">Satellites photograph the Earth at night. Comparing nights shows where power was cut after attacks on the grid. Clouds and moonlight hide the lights on many nights.</p>
     <div class="sec"><h3>Pick a night</h3><div class="btns">${presets.map(([k, t]) => `<button class="btn" data-action="npreset" data-v="${k}" aria-pressed="${p === k}">${t}</button>`).join('')}</div></div>
-    <div class="meta">${n.preset === 'before' ? esc(NIGHT_LAYERS.before.label) + ' · cloud-free average of a year of nights. Pick a date in the bar above to see a single night.' : esc(NIGHT_LAYERS[n.product].label) + '. Use ‹ and › in the bar above to step through nights.'}</div>
+    <div class="sec"><h3>Pick a date</h3>
+      <div class="row"><input class="date" type="date" id="nightDate" min="2012-01-19" max="${yday}" value="${n.date}" aria-label="Night to show">
+      <div class="seg" role="group" aria-label="Image type" style="flex:1"><button data-action="nprod" data-v="corrected" aria-pressed="${n.preset !== 'before' && n.product === 'corrected'}">Corrected</button><button data-action="nprod" data-v="raw" aria-pressed="${n.preset !== 'before' && n.product === 'raw'}">Raw</button></div></div>
+      <div class="meta">${n.preset === 'before' ? esc(NIGHT_LAYERS.before.label) + ' · cloud-free average of a year of nights. Pick a date to see a single night.' : esc(NIGHT_LAYERS[n.product].label)}</div></div>
     <div class="sec"><h3>Image strength</h3><input class="slider" type="range" id="nightOpacity" min="0.2" max="1" step="0.05" value="${n.opacity}" aria-label="Image strength"></div>
     ${statusLine}
     <div class="btns"><a class="btn" href="${worldviewURL()}" target="_blank" rel="noopener">Open this night in NASA Worldview</a></div>
@@ -955,7 +960,7 @@ function placeTbar() {
   const tb = document.getElementById('tbar');
   if (!tb) return;
   const fs = document.body.classList.contains('fs');
-  for (const el of [tb, document.getElementById('nbar')]) {
+  for (const el of [tb]) {
     if (fs) { if (el.parentElement !== document.getElementById('app')) document.getElementById('app').appendChild(el); el.classList.remove('docked'); }
     else { if (el.parentElement !== panel) panel.insertBefore(el, pbody); el.classList.add('docked'); }
   }
@@ -964,7 +969,7 @@ const yesterday = () => new Date(Date.now() - 86400000).toISOString().slice(0, 1
 function updateNbar() {
   const nb = document.getElementById('nbar');
   if (!nb) return;
-  nb.hidden = state.mode !== 'night';
+  nb.hidden = state.mode !== 'night' || !document.body.classList.contains('fs');
   if (nb.hidden) return;
   const n = state.night, before = n.preset === 'before', d = document.getElementById('nDate'), max = yesterday();
   d.max = max; d.value = n.date;
@@ -1408,7 +1413,7 @@ const onPanelClick = e => {
     if (v === 'blackout') { state.night.date = '2022-11-23'; state.night.product = 'corrected'; }
     if (v === 'last') { state.night.date = new Date(Date.now() - 86400000).toISOString().slice(0, 10); state.night.product = 'raw'; }
     updateNight(); renderPanel();
-  } else if (a === 'nprod') { state.night.product = v; updateNight(); renderPanel(); }
+  } else if (a === 'nprod') { setNight(null, v); }
   else if (a === 'rv') { state.rvView = v; renderPanel(); applyMode(false); }
   else if (a === 'play') togglePlay();
 };
@@ -1428,7 +1433,7 @@ pbody.addEventListener('input', e => {
 });
 pbody.addEventListener('change', e => {
   if (e.target.id === 'frontSlider') renderPanel();
-  if (e.target.id === 'nightDate' && e.target.value) { state.night.date = e.target.value; state.night.preset = 'custom'; updateNight(); renderPanel(); }
+  if (e.target.id === 'nightDate' && e.target.value) setNight(e.target.value, state.night.preset === 'before' ? 'corrected' : null);
 });
 addEventListener('hashchange', () => { const h = location.hash.slice(1); if (MODES.includes(h) && h !== state.mode) setMode(h); });
 let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { placeTbar(); frame(state.mode, false); }, 200); });
@@ -1443,6 +1448,7 @@ function setFullscreen(on) {
   closeMenu();
   renderFsCard();
   placeTbar();
+  updateNbar();
   tip.hidden = true;
   const root = document.documentElement;
   try {
