@@ -81,6 +81,18 @@ body.fs .amenu{right:max(16px,env(safe-area-inset-right,0px))}
 .tticks{grid-column:2;display:flex;justify-content:space-between;font:400 10px var(--f-mono);color:var(--faint);margin-top:-4px}
 @media (min-width:900px){.tbar{right:404px;max-width:560px;bottom:16px}}
 body.fs .tbar{right:max(16px,env(safe-area-inset-right,0px))}
+.nbar{position:absolute;z-index:7;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));bottom:12px;display:flex;flex-direction:column;gap:8px;border-radius:16px;padding:10px;box-sizing:border-box}
+.nrow{display:grid;grid-template-columns:40px minmax(0,1fr) 40px;gap:8px;align-items:center}
+.nrow .iconbtn{width:40px;height:40px;border-radius:10px;font-size:20px;line-height:1;background:var(--panel-2);border:1px solid var(--line)}
+.nrow .iconbtn:disabled{opacity:.35;cursor:default}
+.nbar .date.dim{color:var(--faint)}
+.nbar .date{width:100%;box-sizing:border-box;height:40px;text-align:center;font-family:var(--f-display);font-size:14px;min-width:0}
+.nbar .seg button{padding:6px 8px}
+@media (min-width:900px){.nbar{right:404px;max-width:420px;bottom:16px}}
+body.fs .nbar{right:max(16px,env(safe-area-inset-right,0px))}
+.nbar.docked{position:relative;left:auto;right:auto;bottom:auto;flex:none;max-width:none;margin:2px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));background:var(--panel-2);border-color:var(--line);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+.nbar.docked .nrow .iconbtn{background:var(--panel)}
+@media (min-width:900px){.nbar.docked{margin:16px 20px 0}}
 .tbar.docked{position:relative;left:auto;right:auto;bottom:auto;flex:none;max-width:none;margin:2px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));background:var(--panel-2);border-color:var(--line);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
 @media (min-width:900px){.tbar.docked{margin:16px 20px 0}}
 #fsClose{position:absolute;z-index:8;top:10px;right:max(16px,env(safe-area-inset-right,0px));width:44px;height:44px}
@@ -245,6 +257,10 @@ h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02
   <div class="amenu" id="alertMenu" role="dialog" aria-label="Live alerts" hidden></div>
   <button class="pill glass" id="fsAlerts" data-s="loading" aria-haspopup="dialog" aria-controls="alertMenu" hidden><span class="dot" aria-hidden="true"></span><span class="ptxt">Alerts</span></button>
   <section class="fscard" id="fsCard" aria-label="Alert details" hidden></section>
+  <div class="nbar glass" id="nbar" role="group" aria-label="Pick a night" hidden>
+    <div class="nrow"><button class="iconbtn" id="nPrev" aria-label="Previous night">‹</button><input class="date" type="date" id="nDate" min="2012-01-19" aria-label="Night to show"><button class="iconbtn" id="nNext" aria-label="Next night">›</button></div>
+    <div class="seg" role="group" aria-label="Image type"><button data-np="before">2016 average</button><button data-np="corrected">Corrected</button><button data-np="raw">Raw</button></div>
+  </div>
   <div class="tbar glass" id="tbar" role="group" aria-label="Front-line timeline" hidden>
     <button class="iconbtn" id="tPlay" aria-label="Play"></button>
     <div><div class="ttop"><span class="tdate" id="tDate"></span><span class="tarea" id="tArea"></span></div>
@@ -460,7 +476,7 @@ let map = null, mapReady = false;
 const markers = {regions: [], refugees: [], aid: [], blacksea: []};
 
 function padding() {
-  if (document.body.classList.contains('fs')) { const c = document.getElementById('fsCard'); const ch = c && !c.hidden ? c.getBoundingClientRect().height : 0; const tb = document.getElementById('tbar'), tbh = tb && !tb.hidden ? tb.getBoundingClientRect().height + 12 : 0; return isWide() ? {top: 116, bottom: 24 + tbh, left: 16, right: ch ? 432 : 16} : {top: 116, bottom: (ch ? ch + 20 : 24) + tbh, left: 16, right: 16}; }
+  if (document.body.classList.contains('fs')) { const c = document.getElementById('fsCard'); const ch = c && !c.hidden ? c.getBoundingClientRect().height : 0; const tbh = ['tbar', 'nbar'].map(x => document.getElementById(x)).filter(x => x && !x.hidden).reduce((h, x) => h + x.getBoundingClientRect().height + 12, 0); return isWide() ? {top: 116, bottom: 24 + tbh, left: 16, right: ch ? 432 : 16} : {top: 116, bottom: (ch ? ch + 20 : 24) + tbh, left: 16, right: 16}; }
   const top = ($('.top').getBoundingClientRect().bottom || 90) + 8;
   if (isWide()) return {top: Math.min(top, 120), bottom: 24, left: 24, right: 404};
   return {top, bottom: panel.getBoundingClientRect().height + 8, left: 12, right: 12};
@@ -844,10 +860,7 @@ function panelNight() {
   return `<div><div class="eyebrow">NASA · VIIRS Day/Night Band</div><h2>Night lights from space</h2></div>
     <p class="lead">Satellites photograph the Earth at night. Comparing nights shows where power was cut after attacks on the grid. Clouds and moonlight hide the lights on many nights.</p>
     <div class="sec"><h3>Pick a night</h3><div class="btns">${presets.map(([k, t]) => `<button class="btn" data-action="npreset" data-v="${k}" aria-pressed="${p === k}">${t}</button>`).join('')}</div></div>
-    ${n.preset !== 'before' ? `<div class="sec"><h3>Date and product</h3>
-      <div class="row"><input class="date" type="date" id="nightDate" min="2012-01-19" max="${yday}" value="${n.date}" aria-label="Night to show">
-      <div class="seg" role="group" aria-label="Product" style="flex:1"><button data-action="nprod" data-v="corrected" aria-pressed="${n.product === 'corrected'}">Corrected</button><button data-action="nprod" data-v="raw" aria-pressed="${n.product === 'raw'}">Raw</button></div></div>
-      <div class="meta">${esc(NIGHT_LAYERS[n.product].label)}</div></div>` : `<div class="meta">${esc(NIGHT_LAYERS.before.label)} · cloud-free average of a year of nights</div>`}
+    <div class="meta">${n.preset === 'before' ? esc(NIGHT_LAYERS.before.label) + ' · cloud-free average of a year of nights. Pick a date in the bar above to see a single night.' : esc(NIGHT_LAYERS[n.product].label) + '. Use ‹ and › in the bar above to step through nights.'}</div>
     <div class="sec"><h3>Image strength</h3><input class="slider" type="range" id="nightOpacity" min="0.2" max="1" step="0.05" value="${n.opacity}" aria-label="Image strength"></div>
     ${statusLine}
     <div class="btns"><a class="btn" href="${worldviewURL()}" target="_blank" rel="noopener">Open this night in NASA Worldview</a></div>
@@ -935,14 +948,42 @@ function renderPanel() {
   renderPanel.last = state.mode + '|' + state.selected;
   renderFsCard();
   updateTbar();
+  updateNbar();
 }
 const PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>', PAUSE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
 function placeTbar() {
   const tb = document.getElementById('tbar');
   if (!tb) return;
   const fs = document.body.classList.contains('fs');
-  if (fs) { if (tb.parentElement !== document.getElementById('app')) document.getElementById('app').appendChild(tb); tb.classList.remove('docked'); }
-  else { if (tb.parentElement !== panel) panel.insertBefore(tb, pbody); tb.classList.add('docked'); }
+  for (const el of [tb, document.getElementById('nbar')]) {
+    if (fs) { if (el.parentElement !== document.getElementById('app')) document.getElementById('app').appendChild(el); el.classList.remove('docked'); }
+    else { if (el.parentElement !== panel) panel.insertBefore(el, pbody); el.classList.add('docked'); }
+  }
+}
+const yesterday = () => new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+function updateNbar() {
+  const nb = document.getElementById('nbar');
+  if (!nb) return;
+  nb.hidden = state.mode !== 'night';
+  if (nb.hidden) return;
+  const n = state.night, before = n.preset === 'before', d = document.getElementById('nDate'), max = yesterday();
+  d.max = max; d.value = n.date;
+  d.classList.toggle('dim', before);
+  document.getElementById('nPrev').disabled = !before && n.date <= '2012-01-19';
+  document.getElementById('nNext').disabled = !before && n.date >= max;
+  nb.querySelectorAll('[data-np]').forEach(b => b.setAttribute('aria-pressed', String(before ? b.dataset.np === 'before' : b.dataset.np === n.product)));
+  placeTbar();
+}
+function setNight(date, product) {
+  const n = state.night;
+  if (date) { const max = yesterday(); n.date = date < '2012-01-19' ? '2012-01-19' : date > max ? max : date; }
+  if (product === 'before') n.preset = 'before';
+  else { n.preset = 'custom'; if (product) n.product = product; }
+  updateNight(); renderPanel();
+}
+function shiftNight(days) {
+  const t = Date.parse(state.night.date + 'T12:00:00Z') + days * 86400000;
+  setNight(new Date(t).toISOString().slice(0, 10), state.night.preset === 'before' ? 'corrected' : null);
 }
 function updateTbar() {
   const tb = document.getElementById('tbar');
@@ -1373,6 +1414,10 @@ const onPanelClick = e => {
 };
 pbody.addEventListener('click', onPanelClick);
 document.getElementById('tPlay').addEventListener('click', togglePlay);
+document.getElementById('nPrev').addEventListener('click', () => shiftNight(-1));
+document.getElementById('nNext').addEventListener('click', () => shiftNight(1));
+document.getElementById('nDate').addEventListener('change', e => { if (e.target.value) setNight(e.target.value, state.night.preset === 'before' ? 'corrected' : null); });
+document.getElementById('nbar').addEventListener('click', e => { const b = e.target.closest('[data-np]'); if (b) setNight(null, b.dataset.np); });
 document.getElementById('tSlider').addEventListener('input', e => { stopPlay(); state.frontIdx = +e.target.value; setOcc(state.frontIdx); if (mapReady) map.setLayoutProperty('occ-latest', 'visibility', state.frontIdx === DATA.front.snapshots.length - 1 ? 'none' : 'visible'); updateTbar(); });
 document.getElementById('tSlider').addEventListener('change', () => renderPanel());
 document.getElementById('fsCard').addEventListener('click', onPanelClick);
