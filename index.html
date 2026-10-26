@@ -70,6 +70,16 @@ a{color:var(--sky)}
 #fsCard h2{padding-right:44px}
 body.fs .amenu{right:max(16px,env(safe-area-inset-right,0px))}
 @media (min-width:900px){#fsCard{left:auto;width:400px;max-height:70%}}
+.tbar{position:absolute;z-index:7;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));bottom:12px;display:grid;grid-template-columns:44px minmax(0,1fr);gap:4px 12px;align-items:center;border-radius:16px;padding:8px 14px 8px 8px;box-sizing:border-box}
+.tbar .iconbtn{grid-row:1 / span 2;width:44px;height:44px;border-radius:12px;background:var(--wheat);border-color:var(--wheat);color:var(--wheat-ink)}
+.tbar .iconbtn svg{width:18px;height:18px}
+.ttop{display:flex;justify-content:space-between;align-items:baseline;gap:10px;min-width:0}
+.tdate{font-family:var(--f-display);font-weight:500;font-size:14px;white-space:nowrap}
+.tarea{font:500 12px var(--f-mono);color:var(--occ);white-space:nowrap;font-variant-numeric:tabular-nums}
+.tbar .slider{margin:0;height:22px}
+.tticks{grid-column:2;display:flex;justify-content:space-between;font:400 10px var(--f-mono);color:var(--faint);margin-top:-4px}
+@media (min-width:900px){.tbar{right:404px;max-width:560px;bottom:16px}}
+body.fs .tbar{right:max(16px,env(safe-area-inset-right,0px))}
 #fsClose{position:absolute;z-index:8;top:10px;right:max(16px,env(safe-area-inset-right,0px));width:44px;height:44px}
 body.fs .top,body.fs .panel{display:none}
 .modes{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;
@@ -231,6 +241,12 @@ h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02
   <div class="amenu" id="alertMenu" role="dialog" aria-label="Live alerts" hidden></div>
   <button class="pill glass" id="fsAlerts" data-s="loading" aria-haspopup="dialog" aria-controls="alertMenu" hidden><span class="dot" aria-hidden="true"></span><span class="ptxt">Alerts</span></button>
   <section class="fscard" id="fsCard" aria-label="Alert details" hidden></section>
+  <div class="tbar glass" id="tbar" role="group" aria-label="Front-line timeline" hidden>
+    <button class="iconbtn" id="tPlay" aria-label="Play"></button>
+    <div><div class="ttop"><span class="tdate" id="tDate"></span><span class="tarea" id="tArea"></span></div>
+    <input class="slider" type="range" id="tSlider" min="0" max="1" step="1" value="1" aria-label="Map date"></div>
+    <div class="tticks" id="tTicks"></div>
+  </div>
   <button class="iconbtn glass" id="fsClose" aria-label="Close full screen" title="Close full screen" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 </div>
 
@@ -440,10 +456,11 @@ let map = null, mapReady = false;
 const markers = {regions: [], refugees: [], aid: [], blacksea: []};
 
 function padding() {
-  if (document.body.classList.contains('fs')) { const c = document.getElementById('fsCard'); const ch = c && !c.hidden ? c.getBoundingClientRect().height : 0; return isWide() ? {top: 64, bottom: 24, left: 16, right: ch ? 432 : 16} : {top: 64, bottom: ch ? ch + 20 : 24, left: 16, right: 16}; }
+  if (document.body.classList.contains('fs')) { const c = document.getElementById('fsCard'); const ch = c && !c.hidden ? c.getBoundingClientRect().height : 0; const tb = document.getElementById('tbar'), tbh = tb && !tb.hidden ? tb.getBoundingClientRect().height + 12 : 0; return isWide() ? {top: 64, bottom: 24 + tbh, left: 16, right: ch ? 432 : 16} : {top: 64, bottom: (ch ? ch + 20 : 24) + tbh, left: 16, right: 16}; }
   const top = ($('.top').getBoundingClientRect().bottom || 90) + 8;
   if (isWide()) return {top: Math.min(top, 120), bottom: 24, left: 24, right: 404};
-  return {top, bottom: panel.getBoundingClientRect().height + 8, left: 12, right: 12};
+  const tb = document.getElementById('tbar'), tbh = tb && !tb.hidden ? tb.getBoundingClientRect().height + 10 : 0;
+  return {top, bottom: panel.getBoundingClientRect().height + 8 + tbh, left: 12, right: 12};
 }
 const VIEWS = {
   regions: {b: [[22.1, 44.3], [40.3, 52.4]], pitch: () => isWide() ? 50 : 42, bearing: -8},
@@ -851,8 +868,7 @@ function panelFront() {
       <div><b>+${fmt(last[1] - yearAgo[1])}</b><span>km² in the last 12 months</span></div></div>
     <div class="sec"><h3>Occupied area since July 2024</h3>${areaChartSVG(S, sel.date)}
       <div class="meta">+${fmt(last[1] - first[1])} km² since ${dlong(first[0])}. Includes Crimea and areas held since 2014.</div></div>
-    <div class="sec"><div class="row"><h3>Map date: ${dlong(sel.date)}</h3><button class="btn" data-action="play">${playing ? 'Pause' : 'Play'}</button></div>
-      <input class="slider" type="range" id="frontSlider" min="0" max="${snaps.length - 1}" step="1" value="${state.frontIdx}" aria-label="Map date">
+    <div class="sec"><h3>Map date: ${dlong(sel.date)}</h3><div class="meta">Use the timeline bar on the map to play the changes or pick a date.</div>
       <div class="legend"><span><i class="sw hatch"></i>Occupied on ${dlong(sel.date)} (${fmt(selArea[1])} km²)</span>${isLatest ? '' : `<span><i class="sw" style="border:1.5px dashed var(--wheat)"></i>Line on ${dlong(last[0])}</span>`}</div></div>
     <div class="sec"><h3>Share of each region occupied</h3><div class="bars">${shares.map(id => `<button class="bar-row li" data-region="${id}" style="padding:4px 2px"><span class="lab">${esc(short(id))}</span><span class="track"><i class="fill-r" style="width:${Math.min(100, SHARE[id])}%"></i></span><span class="val">${esc(shareLabel(SHARE[id]))}</span></button>`).join('')}</div></div>
     <p class="disclaimer">Shows areas DeepState marks as occupied. Contested grey zones are not shown, and positions change daily.</p>
@@ -900,6 +916,33 @@ function renderPanel() {
   pbody.scrollTop = sameMode ? keep : 0;
   renderPanel.last = state.mode + '|' + state.selected;
   renderFsCard();
+  updateTbar();
+}
+const PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>', PAUSE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
+function placeTbar() {
+  const tb = document.getElementById('tbar');
+  if (!tb || tb.hidden) return;
+  tb.style.bottom = document.body.classList.contains('fs') || isWide() ? '' : (panel.getBoundingClientRect().height + 10) + 'px';
+}
+function updateTbar() {
+  const tb = document.getElementById('tbar');
+  if (!tb) return;
+  const on = state.mode === 'front';
+  const was = !tb.hidden;
+  tb.hidden = !on;
+  if (!on) return;
+  const sn = DATA.front.snapshots, i = state.frontIdx, sl = document.getElementById('tSlider');
+  sl.max = sn.length - 1; sl.value = i;
+  const S = DATA.front.series, d = sn[i].date;
+  const ar = S.reduce((b, c) => Math.abs(Date.parse(c[0]) - Date.parse(d)) < Math.abs(Date.parse(b[0]) - Date.parse(d)) ? c : b);
+  document.getElementById('tDate').textContent = dlong(d);
+  document.getElementById('tArea').textContent = fmt(ar[1]) + ' km² occupied';
+  const pb = document.getElementById('tPlay');
+  pb.innerHTML = playing ? PAUSE_SVG : PLAY_SVG;
+  pb.setAttribute('aria-label', playing ? 'Pause' : 'Play the changes over time');
+  document.getElementById('tTicks').innerHTML = `<span>${new Date(sn[0].date).getUTCFullYear()}</span><span>${new Date(sn[sn.length - 1].date).getUTCFullYear()}</span>`;
+  placeTbar();
+  if (!was && mapReady && state.mode === 'front') map.easeTo({padding: padding(), duration: 0});
 }
 function renderFsCard() {
   const card = document.getElementById('fsCard');
@@ -1241,6 +1284,16 @@ function setSelected(id, fly, silent) {
   if (!silent && state.mode === 'regions') renderPanel();
 }
 function stopPlay() { playing = false; clearInterval(playT); }
+function togglePlay() {
+  if (playing) { stopPlay(); renderPanel(); return; }
+  playing = true;
+  if (state.frontIdx === DATA.front.snapshots.length - 1) setFrontIdx(0); else renderPanel();
+  playT = setInterval(() => {
+    const n = state.frontIdx + 1;
+    if (n >= DATA.front.snapshots.length) { stopPlay(); renderPanel(); return; }
+    setFrontIdx(n);
+  }, REDUCED ? 2000 : 1100);
+}
 function setFrontIdx(i) {
   state.frontIdx = i;
   setOcc(i);
@@ -1259,7 +1312,7 @@ $('#grip').addEventListener('click', () => {
   const ex = panel.classList.toggle('expanded');
   $('#grip').setAttribute('aria-expanded', String(ex));
 });
-panel.addEventListener('transitionend', e => { if (e.propertyName === 'max-height' && mapReady && !isWide()) map.easeTo({padding: padding(), duration: REDUCED ? 0 : 300}); });
+panel.addEventListener('transitionend', e => { if (e.propertyName === 'max-height') { placeTbar(); if (mapReady && !isWide()) map.easeTo({padding: padding(), duration: REDUCED ? 0 : 300}); } });
 const onPanelClick = e => {
   const itm = e.target.closest('[data-item]');
   if (itm) { focusItem(itm.dataset.item); return; }
@@ -1289,18 +1342,12 @@ const onPanelClick = e => {
     updateNight(); renderPanel();
   } else if (a === 'nprod') { state.night.product = v; updateNight(); renderPanel(); }
   else if (a === 'rv') { state.rvView = v; renderPanel(); applyMode(false); }
-  else if (a === 'play') {
-    if (playing) { stopPlay(); renderPanel(); return; }
-    playing = true;
-    if (state.frontIdx === DATA.front.snapshots.length - 1) setFrontIdx(0); else renderPanel();
-    playT = setInterval(() => {
-      const n = state.frontIdx + 1;
-      if (n >= DATA.front.snapshots.length) { stopPlay(); renderPanel(); return; }
-      setFrontIdx(n);
-    }, REDUCED ? 2000 : 900);
-  }
+  else if (a === 'play') togglePlay();
 };
 pbody.addEventListener('click', onPanelClick);
+document.getElementById('tPlay').addEventListener('click', togglePlay);
+document.getElementById('tSlider').addEventListener('input', e => { stopPlay(); state.frontIdx = +e.target.value; setOcc(state.frontIdx); if (mapReady) map.setLayoutProperty('occ-latest', 'visibility', state.frontIdx === DATA.front.snapshots.length - 1 ? 'none' : 'visible'); updateTbar(); });
+document.getElementById('tSlider').addEventListener('change', () => renderPanel());
 document.getElementById('fsCard').addEventListener('click', onPanelClick);
 document.getElementById('fsAlerts').addEventListener('click', () => { menu.hidden ? openMenu() : closeMenu(); });
 pbody.addEventListener('input', e => {
@@ -1312,7 +1359,7 @@ pbody.addEventListener('change', e => {
   if (e.target.id === 'nightDate' && e.target.value) { state.night.date = e.target.value; state.night.preset = 'custom'; updateNight(); renderPanel(); }
 });
 addEventListener('hashchange', () => { const h = location.hash.slice(1); if (MODES.includes(h) && h !== state.mode) setMode(h); });
-let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => frame(state.mode, false), 200); });
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { placeTbar(); frame(state.mode, false); }, 200); });
 
 /* ---------------- Full screen ---------------- */
 const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
@@ -1323,6 +1370,7 @@ function setFullscreen(on) {
   $('#fsAlerts').hidden = !on;
   closeMenu();
   renderFsCard();
+  placeTbar();
   tip.hidden = true;
   const root = document.documentElement;
   try {
