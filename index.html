@@ -912,7 +912,7 @@ function renderFsCard() {
 /* ---------------- Live feed details: places, threats, messages ---------------- */
 const GAZ = JSON.parse(document.getElementById('gaz').textContent).map(r => ({n: r[0], k: norm(r[0]), ll: [r[1], r[2]], rid: r[3]}));
 function norm(s) { return String(s).normalize('NFKD').toLowerCase().replace(/[^a-z]/g, '').replace(/y/g, 'i'); }
-const ALIASES = [['krivorizk', 'krivirih'], ['zaporizk', 'zaporizhzhia'], ['dniprovsk', 'dnipro'], ['sumsk', 'sumi'], ['odesk', 'odesa'], ['podilsk', 'podilsk'], ['zviahel', 'zviahel'], ['sheptitsk', 'sheptitskii']];
+const ALIASES = [['krivorizk', 'kriviirih'], ['zaporizk', 'zaporizhzhia'], ['dniprovsk', 'dnipro'], ['sumsk', 'sumi'], ['odesk', 'odesa'], ['podilsk', 'podilsk'], ['zviahel', 'zviahel'], ['sheptitsk', 'sheptitskii']];
 const cleanName = s => String(s).replace(/^(m\.|smt|s\.|selyshche|selo)\s+/i, '').replace(/\s+(raion|district|hromada|community|oblast|region)$/i, '').trim();
 function lookup(name, rid) {
   let k = norm(cleanName(name));
