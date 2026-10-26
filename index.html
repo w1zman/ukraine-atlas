@@ -47,16 +47,18 @@ a{color:var(--sky)}
 .top>*{pointer-events:auto}
 .bar{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .glass{background:rgba(10,17,28,.78);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border:1px solid var(--line)}
-.brand{display:flex;align-items:center;gap:9px;border-radius:12px;padding:7px 12px 7px 10px;min-width:0}
+.brand{display:flex;align-items:center;gap:9px;border-radius:12px;padding:0 12px 0 10px;height:38px;box-sizing:border-box;min-width:0;flex:0 1 auto}
 .mark{flex:none;width:14px;height:14px;border-radius:3px;background:linear-gradient(var(--sky) 0 50%,var(--wheat) 50% 100%)}
 .brand h1{margin:0;font-family:var(--f-display);font-weight:700;font-size:14px;letter-spacing:.03em;white-space:nowrap}
-.pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;min-width:0}
+.pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:0 13px;height:38px;box-sizing:border-box;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;min-width:0}
 .pill .dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--faint)}
 .pill[data-s="alert"] .dot{background:var(--alert);box-shadow:0 0 0 0 rgba(255,77,79,.6);animation:pulse 1.8s infinite}
 .pill[data-s="clear"] .dot{background:var(--ok)}
 .pill[data-s="loading"] .dot{background:var(--wheat)}
 .pill[data-s="error"] .dot{background:var(--faint)}
 .pill .ptxt{overflow:hidden;text-overflow:ellipsis}
+.pill .short{display:none}
+@media (max-width:560px){.pill .long{display:none}.pill .short{display:inline}.brand h1{font-size:13px}}
 @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(255,77,79,0)}100%{box-shadow:0 0 0 0 rgba(255,77,79,0)}}
 .right{display:flex;align-items:center;gap:8px;min-width:0}
 .iconbtn{flex:none;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;cursor:pointer;padding:0;color:var(--text)}
@@ -64,7 +66,11 @@ a{color:var(--sky)}
 .iconbtn:hover{border-color:var(--edge)}
 #fsClose{position:absolute;z-index:8;top:10px;right:max(16px,env(safe-area-inset-right,0px));width:44px;height:44px}
 body.fs .top,body.fs .panel{display:none}
-.modes{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.modes{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;
+  margin-left:calc(-1 * max(16px,env(safe-area-inset-left,0px)));margin-right:calc(-1 * max(16px,env(safe-area-inset-right,0px)));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));scroll-padding-inline:16px;
+  -webkit-mask-image:linear-gradient(to right,transparent 0,#000 10px,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(to right,transparent 0,#000 10px,#000 calc(100% - 32px),transparent)}
+.modes::after{content:"";flex:none;width:8px}
 .modes::-webkit-scrollbar{display:none}
 .mode{flex:none;border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap}
 .mode[aria-selected="true"]{background:var(--wheat);border-color:var(--wheat);color:var(--wheat-ink)}
@@ -174,7 +180,7 @@ h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02
     <div class="bar">
       <div class="brand glass"><span class="mark" aria-hidden="true"></span><h1>Ukraine Atlas</h1></div>
       <div class="right">
-        <button class="pill glass" id="livePill" data-s="loading" aria-live="polite"><span class="dot" aria-hidden="true"></span><span class="ptxt">Checking alerts…</span></button>
+        <button class="pill glass" id="livePill" data-s="loading" aria-live="polite"><span class="dot" aria-hidden="true"></span><span class="ptxt"><span class="long">Checking alerts…</span><span class="short">Checking…</span></span></button>
         <button class="iconbtn glass" id="fsOpen" aria-label="Show map full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
       </div>
     </div>
@@ -625,11 +631,12 @@ function updateNight() {
 function applyAlerts() {
   const pill = $('#livePill'), txt = pill.querySelector('.ptxt'), L = state.live;
   const n = Object.keys(L.alerts).length, full = Object.values(L.alerts).filter(a => a.scope === 'full').length;
-  if (!state.liveOn) { pill.dataset.s = 'error'; txt.textContent = 'Live alerts off'; }
-  else if (L.status === 'loading') { pill.dataset.s = 'loading'; txt.textContent = 'Checking alerts…'; }
-  else if (L.status === 'error') { pill.dataset.s = 'error'; txt.textContent = 'Alert feed unavailable'; }
-  else if (n === 0) { pill.dataset.s = 'clear'; txt.textContent = 'No regional alerts'; }
-  else { pill.dataset.s = 'alert'; txt.textContent = `${n} region${n === 1 ? '' : 's'} under alert` + (full && full < n ? ` · ${full} in full` : ''); }
+  const say = (s, long, shortT) => { pill.dataset.s = s; txt.innerHTML = `<span class="long">${long}</span><span class="short">${shortT}</span>`; pill.setAttribute('aria-label', long); };
+  if (!state.liveOn) say('error', 'Live alerts off', 'Alerts off');
+  else if (L.status === 'loading') say('loading', 'Checking alerts…', 'Checking…');
+  else if (L.status === 'error') say('error', 'Alert feed unavailable', 'No feed');
+  else if (n === 0) say('clear', 'No regional alerts', 'No alerts');
+  else say('alert', `${n} region${n === 1 ? '' : 's'} under alert` + (full && full < n ? ` · ${full} in full` : ''), `${n} on alert`);
   pill.title = L.updated ? `Updated ${kyivTime(L.updated)} Kyiv time` : '';
   if (!mapReady) return;
   for (const id in R) map.setFeatureState({source: 'regions', id}, {alert: state.liveOn ? alertCode(L.alerts[id]) : 0});
