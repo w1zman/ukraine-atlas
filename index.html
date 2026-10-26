@@ -25,6 +25,7 @@
   --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   color-scheme:dark;
 }
+[hidden]{display:none!important}
 html,body{height:100%}
 body{margin:0;background:var(--night);color:var(--text);font-family:var(--f-body);font-size:15px;line-height:1.45;overflow:hidden;-webkit-font-smoothing:antialiased}
 button,input,select{font:inherit;color:inherit}
@@ -57,6 +58,12 @@ a{color:var(--sky)}
 .pill[data-s="error"] .dot{background:var(--faint)}
 .pill .ptxt{overflow:hidden;text-overflow:ellipsis}
 @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(255,77,79,0)}100%{box-shadow:0 0 0 0 rgba(255,77,79,0)}}
+.right{display:flex;align-items:center;gap:8px;min-width:0}
+.iconbtn{flex:none;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;cursor:pointer;padding:0;color:var(--text)}
+.iconbtn svg{width:18px;height:18px}
+.iconbtn:hover{border-color:var(--edge)}
+#fsClose{position:absolute;z-index:8;top:10px;right:max(16px,env(safe-area-inset-right,0px));width:44px;height:44px}
+body.fs .top,body.fs .panel{display:none}
 .modes{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
 .modes::-webkit-scrollbar{display:none}
 .mode{flex:none;border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap}
@@ -166,7 +173,10 @@ h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02
   <header class="top">
     <div class="bar">
       <div class="brand glass"><span class="mark" aria-hidden="true"></span><h1>Ukraine Atlas</h1></div>
-      <button class="pill glass" id="livePill" data-s="loading" aria-live="polite"><span class="dot" aria-hidden="true"></span><span class="ptxt">Checking alerts…</span></button>
+      <div class="right">
+        <button class="pill glass" id="livePill" data-s="loading" aria-live="polite"><span class="dot" aria-hidden="true"></span><span class="ptxt">Checking alerts…</span></button>
+        <button class="iconbtn glass" id="fsOpen" aria-label="Show map full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      </div>
     </div>
     <nav class="modes" role="tablist" aria-label="Map views">
       <button class="mode glass" role="tab" data-mode="regions">Regions &amp; alerts</button>
@@ -181,6 +191,7 @@ h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02
     <div class="pbody" id="pbody"></div>
   </aside>
   <div class="tip glass" id="tip" hidden></div>
+  <button class="iconbtn glass" id="fsClose" aria-label="Close full screen" title="Close full screen" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
@@ -387,6 +398,7 @@ let map = null, mapReady = false;
 const markers = {regions: [], refugees: [], aid: [], blacksea: []};
 
 function padding() {
+  if (document.body.classList.contains('fs')) return {top: 64, bottom: 24, left: 16, right: 16};
   const top = ($('.top').getBoundingClientRect().bottom || 90) + 8;
   if (isWide()) return {top: Math.min(top, 120), bottom: 24, left: 24, right: 404};
   return {top, bottom: panel.getBoundingClientRect().height + 8, left: 12, right: 12};
@@ -918,6 +930,26 @@ pbody.addEventListener('change', e => {
 });
 addEventListener('hashchange', () => { const h = location.hash.slice(1); if (MODES.includes(h) && h !== state.mode) setMode(h); });
 let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => frame(state.mode, false), 200); });
+
+/* ---------------- Full screen ---------------- */
+const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+function setFullscreen(on) {
+  if (document.body.classList.contains('fs') === on) return;
+  document.body.classList.toggle('fs', on);
+  $('#fsClose').hidden = !on;
+  tip.hidden = true;
+  const root = document.documentElement;
+  try {
+    if (on && !fsEl()) { const r = (root.requestFullscreen || root.webkitRequestFullscreen); if (r) { const pr = r.call(root); if (pr && pr.catch) pr.catch(() => {}); } }
+    if (!on && fsEl()) { const x = (document.exitFullscreen || document.webkitExitFullscreen); if (x) { const pr = x.call(document); if (pr && pr.catch) pr.catch(() => {}); } }
+  } catch (e) { /* the map-only view still works without browser full screen */ }
+  (on ? $('#fsClose') : $('#fsOpen')).focus();
+  if (mapReady) setTimeout(() => { map.resize(); frame(state.mode, false); }, 120);
+}
+$('#fsOpen').addEventListener('click', () => setFullscreen(true));
+$('#fsClose').addEventListener('click', () => setFullscreen(false));
+addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('fs')) setFullscreen(false); });
+['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => { if (!fsEl() && document.body.classList.contains('fs')) setFullscreen(false); }));
 
 /* ---------------- Boot ---------------- */
 document.querySelectorAll('.mode').forEach(b => b.setAttribute('aria-selected', String(b.dataset.mode === state.mode)));
