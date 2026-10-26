@@ -642,9 +642,11 @@ function initMap() {
 
     const pick = ['reg-3d', 'reg-fill'];
     map.on('click', e => {
+      if (e.originalEvent && e.originalEvent.target && e.originalEvent.target.closest && e.originalEvent.target.closest('.mlabel.click')) return;
       if (state.mode === 'refugees') {
         const c = map.queryRenderedFeatures([[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]], {layers: [state.rvView === 'aid' ? 'donors' : 'dests']})[0];
-        if (c && c.properties.name) { zoomCountry(c.properties.name); return; }
+        if (c && c.properties.name) { toggleCountry(c.properties.name); return; }
+        if (state.rvCountry && map.queryRenderedFeatures(e.point, {layers: ['cty-hl']}).length) { toggleCountry(state.rvCountry); return; }
       }
       if (state.mode === 'regions') {
         const hit = map.queryRenderedFeatures([[e.point.x - 10, e.point.y - 10], [e.point.x + 10, e.point.y + 10]], {layers: ['live-dot', 'blast-flash']})[0];
@@ -757,6 +759,10 @@ function zoomCountry(name) {
     }
   }
   renderPanel();
+}
+function toggleCountry(name) {
+  if (state.rvCountry === name) { clearCountry(); frame('refugees'); }
+  else zoomCountry(name);
 }
 function clearCountry(silent) {
   state.rvCountry = null;
@@ -1651,7 +1657,7 @@ $('#grip').addEventListener('click', () => {
 panel.addEventListener('transitionend', e => { if (e.propertyName === 'max-height') { placeTbar(); if (mapReady && !isWide()) map.easeTo({padding: padding(), duration: REDUCED ? 0 : 300}); } });
 const onPanelClick = e => {
   const cty = e.target.closest('[data-country]');
-  if (cty) { zoomCountry(cty.dataset.country); return; }
+  if (cty) { toggleCountry(cty.dataset.country); return; }
   const itm = e.target.closest('[data-item]');
   if (itm) { focusItem(itm.dataset.item); return; }
   const reg = e.target.closest('[data-region]');
@@ -1686,7 +1692,7 @@ const onPanelClick = e => {
 pbody.addEventListener('click', onPanelClick);
 document.getElementById('tPlay').addEventListener('click', togglePlay);
 document.getElementById('rbar').addEventListener('click', e => { if (e.target.closest('[data-action="allcountries"]')) { clearCountry(); frame('refugees'); return; } const b = e.target.closest('[data-rv]'); if (b && b.dataset.rv !== state.rvView) { state.rvView = b.dataset.rv; renderPanel(); applyMode(false); } });
-document.getElementById('map').addEventListener('click', e => { const b = e.target.closest('.mlabel.click'); if (b && b.dataset.country) { e.stopPropagation(); zoomCountry(b.dataset.country); } });
+document.getElementById('map').addEventListener('click', e => { const b = e.target.closest('.mlabel.click'); if (b && b.dataset.country) { e.stopPropagation(); toggleCountry(b.dataset.country); } });
 document.getElementById('nPrev').addEventListener('click', () => shiftNight(-1));
 document.getElementById('nNext').addEventListener('click', () => shiftNight(1));
 document.getElementById('nDate').addEventListener('change', e => { if (e.target.value) setNight(e.target.value, state.night.preset === 'before' ? 'corrected' : null); });
