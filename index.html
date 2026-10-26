@@ -472,8 +472,15 @@ const VIEWS = {
 };
 function frame(mode, animate = true) {
   if (!mapReady) return;
-  const v = VIEWS[mode];
-  const cam = map.cameraForBounds(v.b, {padding: padding(), bearing: v.bearing});
+  const v = VIEWS[mode], pad = padding();
+  // MapLibre adds its stored padding to the padding passed here, so clear it first
+  map.setPadding({top: 0, bottom: 0, left: 0, right: 0});
+  const c = map.getContainer(), W = c.clientWidth, H = c.clientHeight;
+  // on very short screens, give the map at least 40% of the height
+  if (H - pad.top - pad.bottom < H * 0.4) { const k = (H * 0.6) / (pad.top + pad.bottom); pad.top *= k; pad.bottom *= k; }
+  if (W - pad.left - pad.right < W * 0.4) { pad.left = pad.right = 12; }
+  let cam = map.cameraForBounds(v.b, {padding: pad, bearing: v.bearing});
+  if (!cam) cam = map.cameraForBounds(v.b, {padding: 10, bearing: v.bearing});
   if (!cam) return;
   const opts = {center: cam.center, zoom: cam.zoom, pitch: v.pitch(), bearing: v.bearing};
   if (animate && !REDUCED) map.flyTo({...opts, duration: 1300, essential: true}); else map.jumpTo(opts);
@@ -686,6 +693,7 @@ function nightSpec() {
   return {layer: NIGHT_LAYERS[n.product].layer, time: n.date};
 }
 function nightTiles(spec) {
+  if (spec.layer === 'VIIRS_Black_Marble') return 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/2016-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png';
   return `https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=${spec.layer}&STYLES=&SRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE&TIME=${spec.time}`;
 }
 function worldviewURL() {
@@ -701,7 +709,7 @@ function updateNight() {
   if (!mapReady) return;
   removeNight();
   state.night.status = 'loading';
-  map.addSource('night', {type: 'raster', tiles: [nightTiles(nightSpec())], tileSize: 256, maxzoom: 9, attribution: 'NASA GIBS'});
+  { const sp = nightSpec(); map.addSource('night', {type: 'raster', tiles: [nightTiles(sp)], tileSize: 256, maxzoom: sp.layer === 'VIIRS_Black_Marble' ? 8 : 9, attribution: 'NASA GIBS'}); }
   map.addLayer({id: 'night', type: 'raster', source: 'night', paint: {'raster-opacity': state.night.opacity, 'raster-fade-duration': 200}}, 'europe-line');
   clearTimeout(updateNight.t);
   updateNight.t = setTimeout(() => { if (state.night.status === 'loading') { state.night.status = 'error'; if (state.mode === 'night') renderPanel(); } }, 12000);
