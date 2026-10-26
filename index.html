@@ -1320,7 +1320,14 @@ function setFrontIdx(i) {
   renderPanel();
 }
 
-document.querySelector('.modes').addEventListener('click', e => { const b = e.target.closest('.mode'); if (b) setMode(b.dataset.mode); });
+document.querySelector('.modes').addEventListener('click', e => {
+  const b = e.target.closest('.mode');
+  if (!b) return;
+  // pressing a view's button again resets it: close any open alert or region and snap the map back
+  if (state.focusItem) clearFocus(true);
+  if (state.selected && b.dataset.mode === 'regions') setSelected(null, false, true);
+  setMode(b.dataset.mode);
+});
 document.querySelector('.modes').addEventListener('keydown', e => {
   if (!['ArrowRight', 'ArrowLeft'].includes(e.key)) return;
   const i = MODES.indexOf(state.mode), n = MODES[(i + (e.key === 'ArrowRight' ? 1 : MODES.length - 1)) % MODES.length];
