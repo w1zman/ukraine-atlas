@@ -1,8 +1,7 @@
-name: Mirror live data
+name: Mirror air-raid alert feed
 
-# Every 5 minutes: copy the public alerts.in.ua status report.
-# Every 15 minutes: copy NASA FIRMS satellite fire detections (last 24 h) for the Ukraine area.
-# Both go to the `live-data` branch, which the page reads.
+# Copies the public alerts.in.ua status report to the `live-data` branch every
+# 5 minutes. The page reads it from there if the browser can't reach the feed directly.
 on:
   schedule:
     - cron: '*/5 * * * *'
@@ -20,29 +19,15 @@ concurrency:
 jobs:
   mirror:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: scripts
-      - name: Fetch alert report
-        run: mkdir -p out && curl -fsS --retry 2 --max-time 30 https://api.alerts.in.ua/v3/alerts/active.md -o out/active.md
-      - name: Fetch fire detections (every 15 min, else keep the last copy)
-        run: |
-          M=$(date -u +%M)
-          if [ $((10#$M % 15)) -lt 5 ] || [ "${{ github.event_name }}" != "schedule" ]; then
-            python3 scripts/fires.py out/fires.json || true
-          fi
-          if [ ! -s out/fires.json ]; then
-            curl -fsS --max-time 30 "https://raw.githubusercontent.com/${{ github.repository }}/live-data/fires.json" -o out/fires.json || true
-          fi
-          ls -la out
+      - name: Fetch report
+        run: curl -fsS --retry 2 --max-time 30 https://api.alerts.in.ua/v3/alerts/active.md -o active.md
       - name: Publish to live-data branch
         run: |
-          cd out
           git init -q -b live-data .
           git config user.name "alerts-mirror"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -q -m "Live data snapshot $(date -u +%FT%TZ)"
+          git add active.md
+          git commit -q -m "Alert snapshot $(date -u +%FT%TZ)"
           git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" live-data
