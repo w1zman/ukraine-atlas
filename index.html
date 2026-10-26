@@ -1399,9 +1399,8 @@ function setFullscreen(on) {
     setTimeout(() => {
       map.resize();
       const f = state.mode === 'regions' && state.focusItem;
-      if (f) { const o = {center: f.ll, padding: padding()}; REDUCED || !on ? map.jumpTo(o) : map.easeTo({...o, duration: 500}); }
-      else if (!on) frame(state.mode, !REDUCED);
-      else map.easeTo({padding: padding(), duration: 0});
+      if (f) { map.setPadding({top: 0, bottom: 0, left: 0, right: 0}); const o = {center: f.ll, padding: padding()}; REDUCED ? map.jumpTo(o) : map.easeTo({...o, duration: 500}); }
+      else frame(state.mode, !REDUCED);
     }, 120);
   }
 }
