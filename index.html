@@ -89,6 +89,18 @@ body.fs .amenu{right:max(16px,env(safe-area-inset-right,0px))}
 body.fs .tbar{right:max(16px,env(safe-area-inset-right,0px))}
 .nbar{position:absolute;z-index:7;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));bottom:12px;display:flex;flex-direction:column;gap:8px;border-radius:16px;padding:10px;box-sizing:border-box}
 .nrow{display:grid;grid-template-columns:40px minmax(0,1fr) 40px;gap:8px;align-items:center}
+.nrow.n4{grid-template-columns:40px minmax(0,1fr) 40px 40px}
+.nplay{background:var(--wheat)!important;border-color:var(--wheat)!important;color:var(--wheat-ink)}
+.nplay svg{width:16px;height:16px}
+.ncmp{align-self:stretch;text-align:center;padding:7px}
+.btn.ncmp[aria-pressed="true"]{background:var(--wheat);border-color:var(--wheat);color:var(--wheat-ink)}
+#cmap{position:absolute;inset:0;z-index:1;pointer-events:none}
+.swipe{position:absolute;z-index:4;top:0;bottom:0;width:44px;margin-left:-22px;cursor:ew-resize;touch-action:none}
+.swipe::before{content:"";position:absolute;left:21px;top:0;bottom:0;width:2px;background:var(--wheat);box-shadow:0 0 8px rgba(0,0,0,.6)}
+.swipe .knobv{position:absolute;left:50%;top:var(--swy,50%);transform:translate(-50%,-50%);width:38px;height:38px;border-radius:50%;background:var(--wheat);color:var(--wheat-ink);display:grid;place-items:center;font-weight:700;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,.5)}
+.swipe .swl,.swipe .swr{position:absolute;top:var(--swy,50%);margin-top:28px;white-space:nowrap;font:600 11px var(--f-body);color:var(--text);background:rgba(10,17,28,.82);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+.swipe .swl{right:30px}.swipe .swr{left:30px}
+.swipe:focus-visible .knobv{outline:2px solid var(--text);outline-offset:2px}
 .nrow .iconbtn{width:40px;height:40px;border-radius:10px;font-size:20px;line-height:1;background:var(--panel-2);border:1px solid var(--line)}
 .nrow .iconbtn:disabled{opacity:.35;cursor:default}
 .nbar .date.dim{color:var(--faint)}
@@ -264,6 +276,8 @@ h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02
 
 <div id="app">
   <div id="map" role="application" aria-label="Interactive map of Ukraine"></div>
+  <div id="cmap" aria-hidden="true" hidden></div>
+  <div class="swipe" id="swipe" role="slider" tabindex="0" aria-label="Drag to compare the two images" hidden><span class="swl" id="swL"></span><span class="swr" id="swR"></span><span class="knobv" aria-hidden="true">‹ ›</span></div>
   <header class="top">
     <div class="bar">
       <div class="brand glass"><span class="mark" aria-hidden="true"></span><h1>Ukraine Atlas</h1></div>
@@ -296,8 +310,9 @@ h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02
     <div class="rsum" id="rsum"></div>
   </div>
   <div class="nbar glass" id="nbar" role="group" aria-label="Pick a night" hidden>
-    <div class="nrow"><button class="iconbtn" id="nPrev" aria-label="Previous night">‹</button><input class="date" type="date" id="nDate" min="2012-01-19" aria-label="Night to show"><button class="iconbtn" id="nNext" aria-label="Next night">›</button></div>
-    <div class="seg" role="group" aria-label="Image type"><button data-np="before">2016 average</button><button data-np="corrected">Corrected</button><button data-np="raw">Raw</button></div>
+    <div class="nrow n4"><button class="iconbtn" id="nPrev" aria-label="Previous night">‹</button><input class="date" type="date" id="nDate" min="2012-01-19" aria-label="Night to show"><button class="iconbtn" id="nNext" aria-label="Next night">›</button><button class="iconbtn nplay" data-nplay id="nPlay" aria-label="Play night by night"></button></div>
+    <div class="seg" role="group" aria-label="Image type"><button data-np="before">2016</button><button data-np="corrected">Corrected</button><button data-np="raw">Raw</button><button data-np="day">Day</button></div>
+    <button class="btn ghost ncmp" id="nCmp" aria-pressed="false">Before/after slider</button>
   </div>
   <div class="tbar glass" id="tbar" role="group" aria-label="Front-line timeline" hidden>
     <button class="iconbtn" id="tPlay" aria-label="Play"></button>
@@ -469,7 +484,7 @@ const SOURCES = {
     ['Live alerts: alerts.in.ua', 'https://alerts.in.ua/'],
     ['Occupied areas: DeepState, via deepstate-map-data', 'https://github.com/cyterat/deepstate-map-data']
   ],
-  night: [['Night imagery: NASA GIBS, VIIRS Black Marble', 'https://worldview.earthdata.nasa.gov/']],
+  night: [['Night imagery: NASA GIBS, VIIRS Black Marble and Day/Night Band', 'https://worldview.earthdata.nasa.gov/'], ['Day photo: NASA GIBS, MODIS Terra corrected reflectance (true colour)', 'https://earthdata.nasa.gov/gibs']],
   front: [['DeepState map data, daily copies by cyterat (GPL-3.0)', 'https://github.com/cyterat/deepstate-map-data'], ['Areas are calculated from the published polygons and are approximate.', null]],
   refugees: [
     ['UNHCR figures for 30 Apr 2026, via Interfax-Ukraine', 'https://en.interfax.com.ua/news/general/1186730.html'],
@@ -501,7 +516,7 @@ const state = {
   selected: null, hover: null, liveOn: true,
   live: {status: 'loading', alerts: {}, updated: null, source: null, checked: null},
   heightBy: 'flat', frontIdx: DATA.front.snapshots.length - 1, rvView: 'refugees',
-  night: {preset: 'before', date: '2022-11-23', product: 'corrected', opacity: 0.95, status: 'idle'},
+  night: {preset: 'before', date: '2022-11-23', product: 'corrected', opacity: 0.95, status: 'idle', compare: false, cmp: {preset: 'before', date: '2021-11-23', product: 'corrected'}},
   frontLiveDate: null
 };
 
@@ -824,7 +839,7 @@ function applyMode(animate = true) {
   showMarkers('refugees', m === 'refugees' && state.rvView === 'refugees');
   showMarkers('aid', m === 'refugees' && state.rvView === 'aid');
   showMarkers('blacksea', m === 'blacksea');
-  if (m === 'night') updateNight(); else removeNight();
+  if (m === 'night') updateNight(); else { removeNight(); stopNightPlay(); updateCompare(); }
   labelVisibility();
   if (m === 'refugees' && state.rvCountry) zoomCountry(state.rvCountry);
   else if (!(m === 'regions' && state.focusItem)) frame(m, animate);
@@ -857,19 +872,22 @@ function setChange(i) {
 
 /* night lights */
 const NIGHT_LAYERS = {
-  before: {layer: 'VIIRS_Black_Marble', time: () => '2016-01-01', label: 'Annual composite, 2016'},
-  corrected: {layer: 'VIIRS_SNPP_GapFilled_BRDF_Corrected_DayNightBand_Radiance', label: 'Black Marble daily (moonlight-corrected)'},
-  raw: {layer: 'VIIRS_SNPP_DayNightBand_At_Sensor_Radiance', label: 'Raw night pass (includes clouds and moonlight)'}
+  before: {layer: 'VIIRS_Black_Marble', time: () => '2016-01-01', label: 'Annual composite, 2016', short: '2016 average'},
+  corrected: {layer: 'VIIRS_SNPP_GapFilled_BRDF_Corrected_DayNightBand_Radiance', label: 'Black Marble daily (moonlight-corrected)', short: 'Corrected'},
+  raw: {layer: 'VIIRS_SNPP_DayNightBand_At_Sensor_Radiance', label: 'Raw night pass (includes clouds and moonlight)', short: 'Raw'},
+  day: {layer: 'MODIS_Terra_CorrectedReflectance_TrueColor', label: 'Daytime photo, true colour (MODIS Terra, about 10:30 local time)', short: 'Day photo'}
 };
-function nightSpec() {
-  const n = state.night;
-  if (n.preset === 'before') return {layer: NIGHT_LAYERS.before.layer, time: '2016-01-01'};
-  return {layer: NIGHT_LAYERS[n.product].layer, time: n.date};
+function specFor(v) {
+  if (v.preset === 'before') return {layer: NIGHT_LAYERS.before.layer, time: '2016-01-01', kind: 'before'};
+  return {layer: NIGHT_LAYERS[v.product].layer, time: v.date, kind: v.product};
 }
+function nightSpec() { return specFor(state.night); }
 function nightTiles(spec) {
   if (spec.layer === 'VIIRS_Black_Marble') return 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/2016-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png';
+  if (spec.kind === 'day') return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${spec.layer}/default/${spec.time}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
   return `https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=${spec.layer}&STYLES=&SRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE&TIME=${spec.time}`;
 }
+const viewLabel = v => v.preset === 'before' ? '2016 average' : `${dlong(v.date)} · ${NIGHT_LAYERS[v.product].short}`;
 function worldviewURL() {
   const s = nightSpec();
   return `https://worldview.earthdata.nasa.gov/?v=19.5,42.5,42.5,54&l=Coastlines_15m,${s.layer}&t=${s.time}-T00:00:00Z`;
@@ -884,9 +902,94 @@ function updateNight() {
   removeNight();
   state.night.status = 'loading';
   { const sp = nightSpec(); map.addSource('night', {type: 'raster', tiles: [nightTiles(sp)], tileSize: 256, maxzoom: sp.layer === 'VIIRS_Black_Marble' ? 8 : 9, attribution: 'NASA GIBS'}); }
+  updateCompare();
   map.addLayer({id: 'night', type: 'raster', source: 'night', paint: {'raster-opacity': state.night.opacity, 'raster-fade-duration': 200}}, 'europe-line');
   clearTimeout(updateNight.t);
   updateNight.t = setTimeout(() => { if (state.night.status === 'loading') { state.night.status = 'error'; if (state.mode === 'night') renderPanel(); } }, 12000);
+}
+
+/* ---------------- Before/after slider and night playback ---------------- */
+let cmap = null, cmapReady = false, swipeX = 0.5;
+const cmpEl = () => document.getElementById('cmap');
+function ensureCompareMap() {
+  if (cmap || !HAS_MAP) return;
+  cmap = new maplibregl.Map({container: 'cmap', interactive: false, attributionControl: false, center: map.getCenter(), zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch(),
+    style: {version: 8, sources: {}, layers: [{id: 'bg', type: 'background', paint: {'background-color': C.night}}]}});
+  cmap.on('load', () => {
+    cmap.addSource('regions', {type: 'geojson', data: DATA.regions});
+    cmap.addSource('neigh', {type: 'geojson', data: DATA.neighbours});
+    cmap.addLayer({id: 'neigh-line', type: 'line', source: 'neigh', paint: {'line-color': C.europeEdge, 'line-width': 0.8}});
+    cmap.addLayer({id: 'reg-line', type: 'line', source: 'regions', paint: {'line-color': 'rgba(238,242,248,0.38)', 'line-width': 0.7}});
+    cmapReady = true;
+    setCompareLayer();
+  });
+  map.on('move', syncCompare);
+}
+function syncCompare() {
+  if (!cmap || cmpEl().hidden) return;
+  cmap.jumpTo({center: map.getCenter(), zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch(), padding: map.getPadding()});
+}
+function setCompareLayer() {
+  if (!cmapReady) return;
+  if (cmap.getLayer('night')) cmap.removeLayer('night');
+  if (cmap.getSource('night')) cmap.removeSource('night');
+  const sp = specFor(state.night.cmp);
+  cmap.addSource('night', {type: 'raster', tiles: [nightTiles(sp)], tileSize: 256, maxzoom: sp.layer === 'VIIRS_Black_Marble' ? 8 : 9});
+  cmap.addLayer({id: 'night', type: 'raster', source: 'night', paint: {'raster-opacity': state.night.opacity, 'raster-fade-duration': 200}}, 'neigh-line');
+}
+function placeSwipe() {
+  const c = map.getContainer(), W = c.clientWidth, x = Math.round(W * swipeX);
+  cmpEl().style.clipPath = `inset(0 ${W - x}px 0 0)`;
+  const h = document.getElementById('swipe');
+  h.style.left = x + 'px';
+  const pd = padding(), H = c.clientHeight; h.style.setProperty('--swy', Math.round((Math.min(pd.top, H * 0.4) + (H - Math.min(pd.bottom, H * 0.55))) / 2) + 'px');
+  document.getElementById('swL').textContent = '◀ ' + viewLabel(state.night.cmp);
+  document.getElementById('swR').textContent = viewLabel(state.night) + ' ▶';
+}
+function updateCompare() {
+  if (!mapReady) return;
+  const on = state.mode === 'night' && state.night.compare;
+  cmpEl().hidden = !on; document.getElementById('swipe').hidden = !on;
+  if (!on) return;
+  ensureCompareMap();
+  cmap.resize(); syncCompare(); setCompareLayer(); placeSwipe();
+}
+(() => {
+  const h = document.getElementById('swipe');
+  let drag = false;
+  const at = e => { const r = map.getContainer().getBoundingClientRect(); swipeX = Math.min(0.97, Math.max(0.03, (e.clientX - r.left) / r.width)); placeSwipe(); };
+  h.addEventListener('pointerdown', e => { drag = true; h.setPointerCapture(e.pointerId); e.preventDefault(); e.stopPropagation(); });
+  h.addEventListener('pointermove', e => { if (drag) { at(e); e.stopPropagation(); } });
+  h.addEventListener('pointerup', e => { drag = false; e.stopPropagation(); });
+  h.addEventListener('keydown', e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { swipeX = Math.min(0.97, Math.max(0.03, swipeX + (e.key === 'ArrowLeft' ? -0.05 : 0.05))); placeSwipe(); e.preventDefault(); } });
+})();
+addEventListener('resize', () => { if (cmap && !cmpEl().hidden) { cmap.resize(); placeSwipe(); syncCompare(); } });
+function toggleCompare(on) {
+  state.night.compare = on === undefined ? !state.night.compare : on;
+  updateCompare(); renderPanel();
+}
+function setCmp(product, date) {
+  const c = state.night.cmp;
+  if (product === 'before') c.preset = 'before';
+  else { c.preset = 'custom'; if (product) c.product = product; }
+  if (date) { const max = yesterday(); c.date = date < '2012-01-19' ? '2012-01-19' : date > max ? max : date; }
+  setCompareLayer(); placeSwipe(); renderPanel();
+}
+let nPlayT = 0, nPlaying = false;
+function stopNightPlay() { nPlaying = false; clearInterval(nPlayT); paintNightPlay(); }
+function toggleNightPlay() {
+  if (nPlaying) { stopNightPlay(); renderPanel(); return; }
+  const n = state.night;
+  if (n.preset === 'before') { n.preset = 'custom'; n.product = n.product === 'day' ? 'day' : 'corrected'; }
+  if (n.date >= yesterday()) n.date = new Date(Date.now() - 31 * 86400000).toISOString().slice(0, 10);
+  nPlaying = true; updateNight(); renderPanel();
+  nPlayT = setInterval(() => {
+    if (state.night.date >= yesterday()) { stopNightPlay(); renderPanel(); return; }
+    shiftNight(1);
+  }, REDUCED ? 3000 : 1800);
+}
+function paintNightPlay() {
+  document.querySelectorAll('[data-nplay]').forEach(b => { b.innerHTML = nPlaying ? PAUSE_SVG : PLAY_SVG; b.setAttribute('aria-label', nPlaying ? 'Pause' : 'Play night by night'); });
 }
 
 /* ---------------- Alerts → map + UI ---------------- */
@@ -1009,20 +1112,28 @@ function panelRegions() {
 function panelNight() {
   const n = state.night, presets = [['before', 'Before the war (2016)'], ['blackout', '23 Nov 2022 blackout'], ['last', 'Last night']];
   const p = n.preset === 'before' ? 'before' : n.preset;
-  const yday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const yday = yesterday();
   const statusLine = n.status === 'error'
     ? `<div class="notice"><b>Satellite images didn’t load here.</b> Outside image servers can be blocked in some previews, and recent nights can take a few days to appear. Open the same night in NASA Worldview instead.</div>`
     : n.status === 'loading' ? '<div class="meta">Loading satellite tiles…</div>' : '';
-  return `<div><div class="eyebrow">NASA · VIIRS Day/Night Band</div><h2>Night lights from space</h2></div>
-    <p class="lead">Satellites photograph the Earth at night. Comparing nights shows where power was cut after attacks on the grid. Clouds and moonlight hide the lights on many nights.</p>
+  const prodSeg = (cur, before, act) => `<div class="seg" role="group" aria-label="Image type" style="flex:1">${['corrected', 'raw', 'day'].map(k => `<button data-action="${act}" data-v="${k}" aria-pressed="${!before && cur === k}">${NIGHT_LAYERS[k].short}</button>`).join('')}</div>`;
+  const c = n.cmp;
+  const cmpBlock = n.compare ? `<div class="sec"><h3>Left side of the slider</h3>
+      <div class="seg" role="group" aria-label="Left image"><button data-action="cprod" data-v="before" aria-pressed="${c.preset === 'before'}">2016 average</button>${['corrected', 'raw', 'day'].map(k => `<button data-action="cprod" data-v="${k}" aria-pressed="${c.preset !== 'before' && c.product === k}">${NIGHT_LAYERS[k].short}</button>`).join('')}</div>
+      ${c.preset !== 'before' ? `<input class="date" type="date" id="cmpDate" min="2012-01-19" max="${yday}" value="${c.date}" aria-label="Night for the left side">` : ''}
+      <div class="meta">Drag the yellow handle on the map to compare. The right side shows the night picked above.</div></div>` : '';
+  return `<div><div class="eyebrow">NASA · VIIRS and MODIS satellites</div><h2>Night lights from space</h2></div>
+    <p class="lead">Satellites photograph the Earth at night. Comparing nights shows where power was cut after attacks on the grid. Clouds and moonlight hide the lights on many nights. The day photo shows smoke, floods and clouds.</p>
     <div class="sec"><h3>Pick a night</h3><div class="btns">${presets.map(([k, t]) => `<button class="btn" data-action="npreset" data-v="${k}" aria-pressed="${p === k}">${t}</button>`).join('')}</div></div>
     <div class="sec"><h3>Pick a date</h3>
-      <div class="row"><input class="date" type="date" id="nightDate" min="2012-01-19" max="${yday}" value="${n.date}" aria-label="Night to show">
-      <div class="seg" role="group" aria-label="Image type" style="flex:1"><button data-action="nprod" data-v="corrected" aria-pressed="${n.preset !== 'before' && n.product === 'corrected'}">Corrected</button><button data-action="nprod" data-v="raw" aria-pressed="${n.preset !== 'before' && n.product === 'raw'}">Raw</button></div></div>
+      <div class="row"><input class="date" type="date" id="nightDate" min="2012-01-19" max="${yday}" value="${n.date}" aria-label="Night to show">${prodSeg(n.product, n.preset === 'before', 'nprod')}</div>
+      <div class="row"><button class="btn" data-action="nplay"><span data-nplay style="display:inline-flex;width:14px;height:14px;vertical-align:-2px;margin-right:6px"></span>${nPlaying ? 'Pause' : 'Play night by night'}</button><span class="meta">Steps forward one day every 2 seconds, up to yesterday.</span></div>
       <div class="meta">${n.preset === 'before' ? esc(NIGHT_LAYERS.before.label) + ' · cloud-free average of a year of nights. Pick a date to see a single night.' : esc(NIGHT_LAYERS[n.product].label)}</div></div>
+    <div class="sec"><button class="switch" role="switch" aria-checked="${n.compare}" data-action="ncompare"><span><span class="t">Before/after slider</span><span class="s">${n.compare ? 'Left: ' + esc(viewLabel(c)) + ' · Right: ' + esc(viewLabel(n)) : 'Show two images side by side with a handle to drag'}</span></span><span class="knob" aria-hidden="true" style="${n.compare ? 'background:var(--wheat)' : ''}"></span></button></div>
+    ${cmpBlock}
     <div class="sec"><h3>Image strength</h3><input class="slider" type="range" id="nightOpacity" min="0.2" max="1" step="0.05" value="${n.opacity}" aria-label="Image strength"></div>
     ${statusLine}
-    <div class="btns"><a class="btn" href="${worldviewURL()}" target="_blank" rel="noopener">Open this night in NASA Worldview</a></div>
+    <div class="btns"><a class="btn" href="${worldviewURL()}" target="_blank" rel="noopener">Open this date in NASA Worldview</a></div>
     ${srcHTML('night')}`;
 }
 function areaChartSVG(series, markDate) {
@@ -1118,6 +1229,8 @@ function renderPanel() {
   renderFsCard();
   updateTbar();
   updateNbar();
+  paintNightPlay();
+  if (state.mode === 'night' && state.night.compare) placeSwipe();
   updateRbar();
   updateLbar();
 }
@@ -1163,6 +1276,8 @@ function updateNbar() {
   document.getElementById('nPrev').disabled = !before && n.date <= '2012-01-19';
   document.getElementById('nNext').disabled = !before && n.date >= max;
   nb.querySelectorAll('[data-np]').forEach(b => b.setAttribute('aria-pressed', String(before ? b.dataset.np === 'before' : b.dataset.np === n.product)));
+  document.getElementById('nCmp').setAttribute('aria-pressed', String(n.compare));
+  document.getElementById('nCmp').textContent = n.compare ? 'Slider on · left: ' + viewLabel(n.cmp) : 'Before/after slider';
   placeTbar();
 }
 function setNight(date, product) {
@@ -1172,7 +1287,8 @@ function setNight(date, product) {
   else { n.preset = 'custom'; if (product) n.product = product; }
   updateNight(); renderPanel();
 }
-function shiftNight(days) {
+function shiftNight(days, fromUser) {
+  if (fromUser) stopNightPlay();
   const t = Date.parse(state.night.date + 'T12:00:00Z') + days * 86400000;
   setNight(new Date(t).toISOString().slice(0, 10), state.night.preset === 'before' ? 'corrected' : null);
 }
@@ -1833,6 +1949,9 @@ const onPanelClick = e => {
     if (v === 'last') { state.night.date = new Date(Date.now() - 86400000).toISOString().slice(0, 10); state.night.product = 'raw'; }
     updateNight(); renderPanel();
   } else if (a === 'nprod') { setNight(null, v); }
+  else if (a === 'cprod') setCmp(v);
+  else if (a === 'ncompare') toggleCompare();
+  else if (a === 'nplay') toggleNightPlay();
   else if (a === 'rv') { state.rvView = v; renderPanel(); applyMode(false); }
   else if (a === 'play') togglePlay();
 };
@@ -1840,8 +1959,10 @@ pbody.addEventListener('click', onPanelClick);
 document.getElementById('tPlay').addEventListener('click', togglePlay);
 document.getElementById('rbar').addEventListener('click', e => { if (e.target.closest('[data-action="allcountries"]')) { clearCountry(); frame('refugees'); return; } const b = e.target.closest('[data-rv]'); if (b && b.dataset.rv !== state.rvView) { state.rvView = b.dataset.rv; renderPanel(); applyMode(false); } });
 document.getElementById('map').addEventListener('click', e => { const b = e.target.closest('.mlabel.click'); if (b && b.dataset.country) { e.stopPropagation(); toggleCountry(b.dataset.country); } });
-document.getElementById('nPrev').addEventListener('click', () => shiftNight(-1));
-document.getElementById('nNext').addEventListener('click', () => shiftNight(1));
+document.getElementById('nPlay').addEventListener('click', toggleNightPlay);
+document.getElementById('nCmp').addEventListener('click', () => toggleCompare());
+document.getElementById('nPrev').addEventListener('click', () => shiftNight(-1, true));
+document.getElementById('nNext').addEventListener('click', () => shiftNight(1, true));
 document.getElementById('nDate').addEventListener('change', e => { if (e.target.value) setNight(e.target.value, state.night.preset === 'before' ? 'corrected' : null); });
 document.getElementById('nbar').addEventListener('click', e => { const b = e.target.closest('[data-np]'); if (b) setNight(null, b.dataset.np); });
 document.getElementById('tSlider').addEventListener('input', e => { stopPlay(); state.frontIdx = +e.target.value; setOcc(state.frontIdx); if (mapReady) map.setLayoutProperty('occ-latest', 'visibility', state.frontIdx === DATA.front.snapshots.length - 1 ? 'none' : 'visible'); updateTbar(); });
@@ -1850,10 +1971,11 @@ document.getElementById('fsCard').addEventListener('click', onPanelClick);
 document.getElementById('fsAlerts').addEventListener('click', () => { menu.hidden ? openMenu() : closeMenu(); });
 pbody.addEventListener('input', e => {
   if (e.target.id === 'frontSlider') { stopPlay(); state.frontIdx = +e.target.value; setOcc(state.frontIdx); if (mapReady) map.setLayoutProperty('occ-latest', 'visibility', state.frontIdx === DATA.front.snapshots.length - 1 ? 'none' : 'visible'); }
-  if (e.target.id === 'nightOpacity') { state.night.opacity = +e.target.value; if (mapReady && map.getLayer('night')) map.setPaintProperty('night', 'raster-opacity', state.night.opacity); }
+  if (e.target.id === 'nightOpacity') { state.night.opacity = +e.target.value; if (mapReady && map.getLayer('night')) map.setPaintProperty('night', 'raster-opacity', state.night.opacity); if (cmapReady && cmap.getLayer('night')) cmap.setPaintProperty('night', 'raster-opacity', state.night.opacity); }
 });
 pbody.addEventListener('change', e => {
   if (e.target.id === 'frontSlider') renderPanel();
+  if (e.target.id === 'cmpDate' && e.target.value) setCmp(null, e.target.value);
   if (e.target.id === 'nightDate' && e.target.value) setNight(e.target.value, state.night.preset === 'before' ? 'corrected' : null);
 });
 addEventListener('hashchange', () => { const h = location.hash.slice(1); if (MODES.includes(h) && h !== state.mode) setMode(h); });
