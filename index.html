@@ -76,6 +76,10 @@ body.fs .amenu{right:max(16px,env(safe-area-inset-right,0px))}
 .tbar .iconbtn svg{width:18px;height:18px}
 .ttop{display:flex;justify-content:space-between;align-items:baseline;gap:10px;min-width:0}
 .tdate{font-family:var(--f-display);font-weight:500;font-size:14px;white-space:nowrap}
+.tright{display:flex;align-items:center;gap:8px;min-width:0}
+.sndbtn{flex:none;width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);display:grid;place-items:center;cursor:pointer;padding:0}
+.sndbtn svg{width:16px;height:16px}
+.sndbtn[aria-pressed="false"]{color:var(--faint)}
 .tarea{font:500 12px var(--f-mono);color:var(--occ);white-space:nowrap;font-variant-numeric:tabular-nums}
 .tbar .slider{margin:0;height:22px}
 .tticks{grid-column:2;display:flex;justify-content:space-between;font:400 10px var(--f-mono);color:var(--faint);margin-top:-4px}
@@ -286,7 +290,7 @@ h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02
   </div>
   <div class="tbar glass" id="tbar" role="group" aria-label="Front-line timeline" hidden>
     <button class="iconbtn" id="tPlay" aria-label="Play"></button>
-    <div><div class="ttop"><span class="tdate" id="tDate"></span><span class="tarea" id="tArea"></span></div>
+    <div><div class="ttop"><span class="tdate" id="tDate"></span><span class="tright"><span class="tarea" id="tArea"></span><button class="sndbtn" id="tSnd" aria-pressed="true" aria-label="Sound on" title="Sound"></button></span></div>
     <input class="slider" type="range" id="tSlider" min="0" max="1" step="1" value="1" aria-label="Map date"></div>
     <div class="tticks" id="tTicks"></div>
   </div>
@@ -821,6 +825,7 @@ function setChange(i) {
   }
   map.getSource('ffx').setData(fc(pts));
   state.frontFx = pts.length;
+  state.ffxPts = pts.map(f => ({ll: f.geometry.coordinates, ph: f.properties.ph, rr: f.properties.rr, side: f.properties.side, last: null}));
   startFx();
 }
 
@@ -1478,6 +1483,101 @@ document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.t
 addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { closeMenu(); $('#livePill').focus(); } });
 
 
+/* ---------------- Battle sounds (synthesised, only while the timeline plays) ---------------- */
+const SPK_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
+const SPK_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>';
+const Sound = (() => {
+  let ctx = null, master = null, noiseBuf = null, rumble = null, timer = 0, rattleT = 0;
+  let on = true;
+  try { on = localStorage.getItem('ua-atlas-sound') !== 'off'; } catch (e) {}
+  const init = () => {
+    if (ctx) return true;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    ctx = new AC();
+    master = ctx.createGain(); master.gain.value = 0.9;
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 6;
+    master.connect(comp); comp.connect(ctx.destination);
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = i % 2 ? last * 3.5 : w; }
+    return true;
+  };
+  const noise = () => { const n = ctx.createBufferSource(); n.buffer = noiseBuf; n.loop = true; n.loopStart = Math.random(); return n; };
+  const panner = pan => { if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = Math.max(-0.9, Math.min(0.9, pan)); return p; } return ctx.createGain(); };
+  function boom(size = 1, pan = 0) {
+    if (!ctx || !on) return;
+    const t = ctx.currentTime, dur = 1.6 + size * 1.4, out = panner(pan);
+    out.connect(master);
+    // low thump
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(70 + Math.random() * 20, t); o.frequency.exponentialRampToValueAtTime(28, t + 0.5);
+    const og = ctx.createGain(); og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.55 * size, t + 0.01); og.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+    o.connect(og); og.connect(out); o.start(t); o.stop(t + 1);
+    // rolling blast
+    const n = noise(), f = ctx.createBiquadFilter(); f.type = 'lowpass';
+    f.frequency.setValueAtTime(1400, t); f.frequency.exponentialRampToValueAtTime(90, t + dur);
+    const ng = ctx.createGain(); ng.gain.setValueAtTime(0, t); ng.gain.linearRampToValueAtTime(0.5 * size, t + 0.015); ng.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    n.connect(f); f.connect(ng); ng.connect(out); n.start(t); n.stop(t + dur + 0.05);
+  }
+  function rattle() {
+    if (!ctx || !on) return;
+    const t0 = ctx.currentTime, shots = 4 + Math.floor(Math.random() * 9), gap = 0.07 + Math.random() * 0.05, out = panner(Math.random() * 1.6 - 0.8);
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900 + Math.random() * 600; f.Q.value = 0.8;
+    const g = ctx.createGain(); g.gain.value = 0.05 + Math.random() * 0.04;
+    f.connect(g); g.connect(out); out.connect(master);
+    for (let i = 0; i < shots; i++) {
+      const t = t0 + i * gap * (0.8 + Math.random() * 0.4), n = noise(), e = ctx.createGain();
+      e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(1, t + 0.003); e.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+      n.connect(e); e.connect(f); n.start(t); n.stop(t + 0.08);
+    }
+  }
+  function startRumble() {
+    if (rumble || !ctx) return;
+    const n = noise(), f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 110;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, ctx.currentTime); g.gain.linearRampToValueAtTime(on ? 0.22 : 0, ctx.currentTime + 1.2);
+    n.connect(f); f.connect(g); g.connect(master); n.start();
+    rumble = {n, g};
+  }
+  function stopRumble() {
+    if (!rumble) return;
+    const {n, g} = rumble; rumble = null;
+    try { g.gain.cancelScheduledValues(ctx.currentTime); g.gain.setTargetAtTime(0, ctx.currentTime, 0.3); n.stop(ctx.currentTime + 1.2); } catch (e) {}
+  }
+  // fire a boom when each map flash starts (same 2.6 s cycle and phase as the animation)
+  function tick() {
+    if (!playing || state.mode !== 'front' || !mapReady) return;
+    const tb = (performance.now() % 2600) / 2600, W = map.getContainer().clientWidth;
+    for (const p of state.ffxPts || []) {
+      const q = (tb + p.ph) % 1;
+      if (p.last != null && q < p.last && Math.random() < (p.side === 'ru' ? 0.85 : 0.7)) boom(Math.min(1.2, 0.45 + p.rr / 40), map.project(p.ll).x / W * 2 - 1);
+      p.last = q;
+    }
+    if (performance.now() > rattleT) { rattle(); rattleT = performance.now() + 700 + Math.random() * 2200; }
+  }
+  return {
+    start() { if (!on || !init()) return; if (ctx.state === 'suspended') ctx.resume(); startRumble(); clearInterval(timer); timer = setInterval(tick, 60); },
+    stop() { clearInterval(timer); timer = 0; stopRumble(); (state.ffxPts || []).forEach(p => { p.last = null; }); },
+    get on() { return on; },
+    toggle() {
+      on = !on;
+      try { localStorage.setItem('ua-atlas-sound', on ? 'on' : 'off'); } catch (e) {}
+      if (on && playing) this.start(); else if (!on) this.stop();
+      return on;
+    }
+  };
+})();
+function paintSnd() {
+  const b = document.getElementById('tSnd');
+  if (!b) return;
+  b.innerHTML = Sound.on ? SPK_ON : SPK_OFF;
+  b.setAttribute('aria-pressed', String(Sound.on));
+  b.setAttribute('aria-label', Sound.on ? 'Mute battle sounds' : 'Turn on battle sounds');
+}
+document.getElementById('tSnd').addEventListener('click', () => { Sound.toggle(); paintSnd(); });
+paintSnd();
+
 /* ---------------- Interactions ---------------- */
 let playing = false, playT = null;
 function setMode(m, animate = true) {
@@ -1510,10 +1610,11 @@ function setSelected(id, fly, silent) {
   }
   if (!silent && state.mode === 'regions') renderPanel();
 }
-function stopPlay() { playing = false; clearInterval(playT); }
+function stopPlay() { playing = false; clearInterval(playT); Sound.stop(); }
 function togglePlay() {
   if (playing) { stopPlay(); renderPanel(); return; }
   playing = true;
+  Sound.start();
   if (state.frontIdx === DATA.front.snapshots.length - 1) setFrontIdx(0); else renderPanel();
   playT = setInterval(() => {
     const n = state.frontIdx + 1;
