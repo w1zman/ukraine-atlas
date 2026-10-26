@@ -81,6 +81,8 @@ body.fs .amenu{right:max(16px,env(safe-area-inset-right,0px))}
 .tticks{grid-column:2;display:flex;justify-content:space-between;font:400 10px var(--f-mono);color:var(--faint);margin-top:-4px}
 @media (min-width:900px){.tbar{right:404px;max-width:560px;bottom:16px}}
 body.fs .tbar{right:max(16px,env(safe-area-inset-right,0px))}
+.tbar.docked{position:relative;left:auto;right:auto;bottom:auto;flex:none;max-width:none;margin:2px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));background:var(--panel-2);border-color:var(--line);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+@media (min-width:900px){.tbar.docked{margin:16px 20px 0}}
 #fsClose{position:absolute;z-index:8;top:10px;right:max(16px,env(safe-area-inset-right,0px));width:44px;height:44px}
 body.fs .top,body.fs .panel{display:none}
 .modes{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;
@@ -460,8 +462,7 @@ function padding() {
   if (document.body.classList.contains('fs')) { const c = document.getElementById('fsCard'); const ch = c && !c.hidden ? c.getBoundingClientRect().height : 0; const tb = document.getElementById('tbar'), tbh = tb && !tb.hidden ? tb.getBoundingClientRect().height + 12 : 0; return isWide() ? {top: 64, bottom: 24 + tbh, left: 16, right: ch ? 432 : 16} : {top: 64, bottom: (ch ? ch + 20 : 24) + tbh, left: 16, right: 16}; }
   const top = ($('.top').getBoundingClientRect().bottom || 90) + 8;
   if (isWide()) return {top: Math.min(top, 120), bottom: 24, left: 24, right: 404};
-  const tb = document.getElementById('tbar'), tbh = tb && !tb.hidden ? tb.getBoundingClientRect().height + 10 : 0;
-  return {top, bottom: panel.getBoundingClientRect().height + 8 + tbh, left: 12, right: 12};
+  return {top, bottom: panel.getBoundingClientRect().height + 8, left: 12, right: 12};
 }
 const VIEWS = {
   regions: {b: [[22.1, 44.3], [40.3, 52.4]], pitch: () => isWide() ? 50 : 42, bearing: -8},
@@ -937,8 +938,10 @@ function renderPanel() {
 const PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>', PAUSE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
 function placeTbar() {
   const tb = document.getElementById('tbar');
-  if (!tb || tb.hidden) return;
-  tb.style.bottom = document.body.classList.contains('fs') || isWide() ? '' : (panel.getBoundingClientRect().height + 10) + 'px';
+  if (!tb) return;
+  const fs = document.body.classList.contains('fs');
+  if (fs) { if (tb.parentElement !== document.getElementById('app')) document.getElementById('app').appendChild(tb); tb.classList.remove('docked'); }
+  else { if (tb.parentElement !== panel) panel.insertBefore(tb, pbody); tb.classList.add('docked'); }
 }
 function updateTbar() {
   const tb = document.getElementById('tbar');
