@@ -124,6 +124,11 @@ body.fs .top{top:64px;right:0}
 .mlabel b{font-family:var(--f-mono);font-weight:500;color:var(--wheat);margin-left:4px}
 .mlabel.aid b{color:var(--sky)}
 .mlabel.dim{color:var(--muted)}
+.mk{position:relative;width:0;height:0}
+.mk>.mlabel{position:absolute;left:0;top:0;font:600 11px/1.2 var(--f-body);color:var(--text)}
+.mlabel.click{pointer-events:auto;cursor:pointer}
+.mlabel.click:hover,.mlabel.click:focus-visible{border-color:var(--wheat)}
+.mlabel.dim.click{color:var(--muted)}
 .hide-labels .rlabel{display:none}
 .amenu{position:absolute;z-index:9;right:max(16px,env(safe-area-inset-right,0px));width:min(400px,calc(100% - 32px));max-height:min(68vh,640px);overflow-y:auto;overscroll-behavior:contain;border-radius:16px;padding:12px 10px 14px;background:rgba(12,19,32,.97);border:1px solid var(--line);box-shadow:0 18px 44px rgba(0,0,0,.55);display:flex;flex-direction:column;gap:10px;box-sizing:border-box}
 @media (min-width:900px){.amenu{right:404px}}
@@ -221,6 +226,11 @@ h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02
 .bars{display:flex;flex-direction:column;gap:7px}
 .bar-row{display:grid;grid-template-columns:minmax(78px,32%) 1fr auto;align-items:center;gap:8px;font-size:13px}
 .bar-row .lab{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.linkish{border:0;background:none;padding:0;text-align:left;cursor:pointer;color:var(--text);font:inherit;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.linkish:hover{text-decoration-color:var(--wheat)}
+.ccard{display:flex;flex-direction:column;gap:8px}
+.ccard b{color:var(--text);font-family:var(--f-display);font-weight:500;font-size:17px;display:block}
+.ccard span{display:block;font-size:12.5px}
 .track{height:10px;border-radius:4px;background:var(--panel-2);overflow:hidden;display:flex}
 .track i{display:block;height:100%}
 .bar-row .val{font:500 12px var(--f-mono);color:var(--text);font-variant-numeric:tabular-nums;text-align:right;min-width:56px}
@@ -593,6 +603,9 @@ function initMap() {
     map.addLayer({id: 'dests', type: 'circle', source: 'dests', paint: {'circle-radius': ['get', 'r'], 'circle-color': C.wheat, 'circle-opacity': 0.9, 'circle-stroke-color': C.night, 'circle-stroke-width': 1.5}});
     map.addLayer({id: 'donors', type: 'circle', source: 'donors', paint: {'circle-radius': ['get', 'r'], 'circle-color': C.sky, 'circle-opacity': 0.85, 'circle-stroke-color': C.night, 'circle-stroke-width': 1.5}});
 
+    map.addLayer({id: 'cty-hl', type: 'fill', source: 'europe', filter: ['==', ['get', 'n'], ''], layout: {visibility: 'none'}, paint: {'fill-color': C.wheat, 'fill-opacity': 0.12}}, 'europe-line');
+    map.addLayer({id: 'cty-hl-line', type: 'line', source: 'europe', filter: ['==', ['get', 'n'], ''], layout: {visibility: 'none'}, paint: {'line-color': C.wheat, 'line-width': 1.6}});
+    map.on('move', scheduleLayout);
     map.addSource('chgGain', {type: 'geojson', data: fc([])});
     map.addSource('chgLoss', {type: 'geojson', data: fc([])});
     map.addSource('ffx', {type: 'geojson', data: fc([])});
@@ -625,6 +638,10 @@ function initMap() {
 
     const pick = ['reg-3d', 'reg-fill'];
     map.on('click', e => {
+      if (state.mode === 'refugees') {
+        const c = map.queryRenderedFeatures([[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]], {layers: [state.rvView === 'aid' ? 'donors' : 'dests']})[0];
+        if (c && c.properties.name) { zoomCountry(c.properties.name); return; }
+      }
       if (state.mode === 'regions') {
         const hit = map.queryRenderedFeatures([[e.point.x - 10, e.point.y - 10], [e.point.x + 10, e.point.y + 10]], {layers: ['live-dot', 'blast-flash']})[0];
         if (hit && hit.properties.id) { focusItem(hit.properties.id); return; }
@@ -667,17 +684,81 @@ function buildMarkers() {
   };
   for (const id in R) markers.regions.push(Object.assign(mk(R[id].lab, esc(short(id)), 'rlabel'), {rid: id}));
   const maxR = REFUGEES[0].v;
-  REFUGEES.forEach(d => markers.refugees.push(mk(d.ll, `${esc(d.c)}<b>${d.approx ? '≈' : ''}${mil(d.v)}</b>`, 'mlabel' + (d.other ? ' dim' : ''), 'bottom').setOffset([0, -(4 + 16 * Math.sqrt(d.v / maxR))])));
-  AID.filter(d => d.ll).forEach(d => { const t = d.m + d.f + d.h; markers.aid.push(mk(d.ll, `${esc(d.d)}<b>€${t.toFixed(t >= 100 ? 0 : 1)}bn</b>`, 'mlabel aid', 'bottom').setOffset([0, -(4 + 22 * Math.sqrt(t / 190.72))])); });
+  const lab = (ll, html, cls, r, name) => {
+    const el = document.createElement('div'); el.className = 'mk';
+    const l = document.createElement('button'); l.className = cls + ' click'; l.innerHTML = html; l.dataset.country = name; l.setAttribute('aria-label', 'Zoom to ' + name);
+    el.appendChild(l);
+    return Object.assign(new maplibregl.Marker({element: el, anchor: 'center'}).setLngLat(ll), {r, cname: name});
+  };
+  REFUGEES.forEach(d => markers.refugees.push(lab(d.ll, `${esc(d.c)}<b>${d.approx ? '≈' : ''}${mil(d.v)}</b>`, 'mlabel' + (d.other ? ' dim' : ''), 3 + 13 * Math.sqrt(d.v / maxR), d.c)));
+  AID.filter(d => d.ll).forEach(d => { const t = d.m + d.f + d.h; markers.aid.push(lab(d.ll, `${esc(d.d)}<b>€${t.toFixed(t >= 100 ? 0 : 1)}bn</b>`, 'mlabel aid', 4 + 20 * Math.sqrt(t / 190.72), d.d)); });
   PORTS.forEach(p => markers.blacksea.push(mk(p.ll, esc(p.n), 'mlabel' + (p.k === 'closed' || p.k === 'foreign' ? ' dim' : ''), 'left').setOffset([9, 0])));
 }
 function buildFlows() {
   const maxR = REFUGEES[0].v;
   map.getSource('flows').setData(fc(REFUGEES.map(d => featureOf({type: 'LineString', coordinates: curve(ORIGIN, d.ll, d.ll[0] < ORIGIN[0] ? -0.16 : 0.16)}, {w: 1 + 9 * Math.sqrt(d.v / maxR)}))));
-  map.getSource('dests').setData(fc(REFUGEES.map(d => featureOf({type: 'Point', coordinates: d.ll}, {r: 3 + 13 * Math.sqrt(d.v / maxR)}))));
-  map.getSource('donors').setData(fc(AID.filter(d => d.ll).map(d => featureOf({type: 'Point', coordinates: d.ll}, {r: 4 + 20 * Math.sqrt((d.m + d.f + d.h) / 190.72)}))));
+  map.getSource('dests').setData(fc(REFUGEES.map(d => featureOf({type: 'Point', coordinates: d.ll}, {r: 3 + 13 * Math.sqrt(d.v / maxR), name: d.c}))));
+  map.getSource('donors').setData(fc(AID.filter(d => d.ll).map(d => featureOf({type: 'Point', coordinates: d.ll}, {r: 4 + 20 * Math.sqrt((d.m + d.f + d.h) / 190.72), name: d.d}))));
 }
-function showMarkers(group, on) { markers[group].forEach(m => on ? m.addTo(map) : m.remove()); }
+function showMarkers(group, on) { markers[group].forEach(m => on ? m.addTo(map) : m.remove()); if (on && (group === 'refugees' || group === 'aid')) requestAnimationFrame(() => layoutLabels(group)); }
+// place each label above, below, right or left of its circle, whichever is free; hide it if none is
+function layoutLabels(group) {
+  if (!mapReady) return;
+  const ms = markers[group].filter(m => m._map);
+  if (!ms.length) return;
+  const c = map.getContainer(), W = c.clientWidth, H = c.clientHeight, pad = padding();
+  const minY = Math.max(2, pad.top - 8), maxY = H - Math.max(2, pad.bottom - 8), minX = Math.max(2, pad.left - 8), maxX = W - Math.max(2, pad.right - 8);
+  const hit = (a, b) => a.x < b.x + b.w + 3 && b.x < a.x + a.w + 3 && a.y < b.y + b.h + 3 && b.y < a.y + a.h + 3;
+  const boxes = [];
+  for (const m of ms.slice().sort((a, b) => b.r - a.r)) {
+    const l = m.getElement().firstChild, w = l.offsetWidth, h = l.offsetHeight, p = map.project(m.getLngLat()), r = m.r + 3;
+    const cands = [[-w / 2, -r - h], [-w / 2, r], [r, -h / 2], [-r - w, -h / 2], [r * 0.7, -r * 0.7 - h], [-r * 0.7 - w, -r * 0.7 - h], [r * 0.7, r * 0.7], [-r * 0.7 - w, r * 0.7], [-w / 2, -r - h - 16], [-w / 2, r + 16]];
+    let ok = null;
+    for (const [dx, dy] of cands) {
+      const box = {x: p.x + dx, y: p.y + dy, w, h};
+      if (box.x < minX || box.y < minY || box.x + w > maxX || box.y + h > maxY) continue;
+      if (boxes.some(b => hit(b, box))) continue;
+      ok = [dx, dy, box]; break;
+    }
+    if (ok) { l.style.transform = `translate(${ok[0]}px,${ok[1]}px)`; l.style.visibility = 'visible'; boxes.push(ok[2]); }
+    else l.style.visibility = 'hidden';
+  }
+}
+let layoutRaf = 0;
+function scheduleLayout() {
+  if (layoutRaf || state.mode !== 'refugees') return;
+  layoutRaf = requestAnimationFrame(() => { layoutRaf = 0; layoutLabels(state.rvView === 'aid' ? 'aid' : 'refugees'); });
+}
+/* zoom to a country in the refugees and aid view */
+const CNAME = {'Czechia': 'Czech Republic', 'EU institutions': 'Belgium'};
+function countryBounds(name) {
+  const f = DATA.europe.features.find(x => x.properties.n === (CNAME[name] || name));
+  if (!f) return null;
+  let b = [180, 90, -180, -90];
+  for (const poly of f.geometry.coordinates) for (const [x, y] of poly[0]) { b = [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)]; }
+  // keep the mainland: Norway's and Denmark's far islands stretch the box
+  return [[b[0], b[1]], [b[2], b[3]]];
+}
+function zoomCountry(name) {
+  state.rvCountry = name;
+  if (mapReady) {
+    map.setFilter('cty-hl', ['==', ['get', 'n'], CNAME[name] || name]);
+    map.setFilter('cty-hl-line', ['==', ['get', 'n'], CNAME[name] || name]);
+    map.setLayoutProperty('cty-hl', 'visibility', 'visible'); map.setLayoutProperty('cty-hl-line', 'visibility', 'visible');
+    const b = countryBounds(name);
+    if (b) {
+      map.setPadding({top: 0, bottom: 0, left: 0, right: 0});
+      const cam = map.cameraForBounds(b, {padding: padding(), maxZoom: 6.5});
+      if (cam) { const o = {center: cam.center, zoom: Math.min(cam.zoom, 6.5), pitch: 0, bearing: 0}; REDUCED ? map.jumpTo(o) : map.flyTo({...o, duration: 1200, essential: true}); }
+    }
+  }
+  renderPanel();
+}
+function clearCountry(silent) {
+  state.rvCountry = null;
+  if (mapReady) { map.setLayoutProperty('cty-hl', 'visibility', 'none'); map.setLayoutProperty('cty-hl-line', 'visibility', 'none'); }
+  if (!silent) renderPanel();
+}
 function labelVisibility() {
   if (!mapReady) return;
   document.getElementById('map').classList.toggle('hide-labels', map.getZoom() < 4.75);
@@ -687,10 +768,10 @@ const LAYERS = {
   regions: ['europe-fill', 'neigh-fill', 'europe-line', 'neigh-line', 'reg-3d', 'occ-3d', 'live-pulse', 'live-dot', 'blast-ring', 'blast-flash', 'focus-ring', 'blast-col', 'focus-beacon'],
   night: ['europe-fill', 'neigh-fill', 'europe-line', 'neigh-line', 'reg-line'],
   front: ['europe-fill', 'neigh-fill', 'europe-line', 'neigh-line', 'reg-fill', 'occ-tint', 'occ-fill', 'chg-gain', 'chg-loss', 'reg-line', 'occ-line', 'chg-gain-line', 'chg-loss-line', 'occ-latest', 'ffx-ring', 'ffx-flash'],
-  refugees: ['europe-fill', 'neigh-fill', 'europe-line', 'neigh-line', 'reg-fill', 'reg-line', 'flows', 'dests', 'donors'],
+  refugees: ['europe-fill', 'neigh-fill', 'cty-hl', 'europe-line', 'neigh-line', 'cty-hl-line', 'reg-fill', 'reg-line', 'flows', 'dests', 'donors'],
   blacksea: ['europe-fill', 'neigh-fill', 'europe-line', 'neigh-line', 'reg-fill', 'occ-tint', 'occ-fill', 'reg-line', 'occ-line', 'route', 'ports']
 };
-const ALL_LAYERS = ['chg-gain', 'chg-loss', 'chg-gain-line', 'chg-loss-line', 'ffx-ring', 'ffx-flash', 'reg-fill', 'occ-tint', 'occ-fill', 'reg-line', 'occ-line', 'occ-latest', 'reg-3d', 'occ-3d', 'route', 'ports', 'flows', 'dests', 'donors', 'live-pulse', 'live-dot', 'blast-ring', 'blast-flash', 'focus-ring', 'blast-col', 'focus-beacon'];
+const ALL_LAYERS = ['cty-hl', 'cty-hl-line', 'chg-gain', 'chg-loss', 'chg-gain-line', 'chg-loss-line', 'ffx-ring', 'ffx-flash', 'reg-fill', 'occ-tint', 'occ-fill', 'reg-line', 'occ-line', 'occ-latest', 'reg-3d', 'occ-3d', 'route', 'ports', 'flows', 'dests', 'donors', 'live-pulse', 'live-dot', 'blast-ring', 'blast-flash', 'focus-ring', 'blast-col', 'focus-beacon'];
 
 function applyMode(animate = true) {
   if (!mapReady) return;
@@ -698,6 +779,7 @@ function applyMode(animate = true) {
   if (m === 'regions' && state.heightBy === 'pop') on.delete('occ-3d');
   if (m === 'front' && state.frontIdx === DATA.front.snapshots.length - 1) on.delete('occ-latest');
   if (m === 'refugees') { on.delete(state.rvView === 'refugees' ? 'donors' : 'flows'); if (state.rvView === 'aid') on.delete('dests'); }
+  if (!(m === 'refugees' && state.rvCountry)) { on.delete('cty-hl'); on.delete('cty-hl-line'); }
   for (const l of ALL_LAYERS) map.setLayoutProperty(l, 'visibility', on.has(l) ? 'visible' : 'none');
   // per-mode styling of shared layers
   map.setPaintProperty('occ-tint', 'fill-opacity', m === 'front' ? 0.42 : 0.22);
@@ -714,7 +796,9 @@ function applyMode(animate = true) {
   showMarkers('blacksea', m === 'blacksea');
   if (m === 'night') updateNight(); else removeNight();
   labelVisibility();
-  if (!(m === 'regions' && state.focusItem)) frame(m, animate);
+  if (m === 'refugees' && state.rvCountry) zoomCountry(state.rvCountry);
+  else if (!(m === 'regions' && state.focusItem)) frame(m, animate);
+  if (m === 'refugees') scheduleLayout();
   startFx();
 }
 function setOcc(i) {
@@ -953,20 +1037,28 @@ function panelFront() {
 }
 function panelRefugees() {
   const v = state.rvView;
+  const cc = state.rvCountry;
+  const ccard = cc ? (() => {
+    const r = REFUGEES.find(x => x.c === cc), d = AID.find(x => x.d === cc);
+    const rows = [];
+    if (r) rows.push(`<div><b>${r.approx ? '≈' : ''}${fmt(r.v)}</b><span>${r.other ? 'applied for protection since 2022' : 'refugees from Ukraine'} · ${esc(r.s)}</span></div>`);
+    if (d) rows.push(`<div><b>€${(d.m + d.f + d.h).toFixed(1)}bn</b><span>aid since 2022: military €${d.m.toFixed(1)}bn, financial €${d.f.toFixed(1)}bn, humanitarian €${d.h.toFixed(1)}bn</span></div>`);
+    return `<div class="notice ccard"><div class="row"><b style="font-size:16px">${esc(cc)}</b><button class="btn ghost" data-action="allcountries">All of Europe</button></div>${rows.join('')}</div>`;
+  })() : '';
   const seg = `<div class="seg" role="group" aria-label="Show"><button data-action="rv" data-v="refugees" aria-pressed="${v === 'refugees'}">Refugees</button><button data-action="rv" data-v="aid" aria-pressed="${v === 'aid'}">Aid</button></div>`;
   if (v === 'refugees') {
     const max = REFUGEES[0].v;
-    return `<div><div class="eyebrow">UNHCR · Eurostat · IOM</div><h2>Where people went</h2></div>${seg}
+    return `<div><div class="eyebrow">UNHCR · Eurostat · IOM</div><h2>Where people went</h2></div>${seg}${ccard}
       <div class="big"><div class="w"><b>5.76 M</b><span>refugees recorded abroad (Apr 2026, not counting Russia)</span></div><div><b>4.43 M</b><span>under EU temporary protection (Jul 2026)</span></div><div><b>3.9 M</b><span>displaced inside Ukraine (Jun 2026)</span></div></div>
-      <div class="sec"><h3>Largest host countries</h3><div class="bars">${REFUGEES.map(d => `<div class="bar-row" title="${esc(d.s)}"><span class="lab">${esc(d.c)}${d.other ? '*' : ''}</span><span class="track"><i class="${d.other ? 'fill-note' : 'fill-w'}" style="width:${(100 * d.v / max).toFixed(1)}%"></i></span><span class="val">${d.approx ? '≈' : ''}${fmt(d.v)}</span></div>`).join('')}</div>
+      <div class="sec"><h3>Largest host countries</h3><div class="bars">${REFUGEES.map(d => `<div class="bar-row" title="${esc(d.s)}"><button class="lab linkish" data-country="${esc(d.c)}">${esc(d.c)}${d.other ? '*' : ''}</button><span class="track"><i class="${d.other ? 'fill-note' : 'fill-w'}" style="width:${(100 * d.v / max).toFixed(1)}%"></i></span><span class="val">${d.approx ? '≈' : ''}${fmt(d.v)}</span></div>`).join('')}</div>
       <div class="meta">Figures mix sources and dates (hover or see sources). ≈ marks estimates derived from published rates. *Norway: about 106,000 Ukrainians have applied for protection since 2022 (UDI, Jan 2026), a different measure from people currently registered.</div></div>
       ${srcHTML('refugees')}`;
   }
   const tot = d => d.m + d.f + d.h, max = tot(AID[0]);
-  return `<div><div class="eyebrow">Kiel Institute · Ukraine Support Tracker</div><h2>Who sends aid</h2></div>${seg}
+  return `<div><div class="eyebrow">Kiel Institute · Ukraine Support Tracker</div><h2>Who sends aid</h2></div>${seg}${ccard}
     <p class="lead">Aid allocated from January 2022 to April 2026, in euro billions. Circles on the map show European donors.</p>
     <div class="legend"><span><i class="sw" style="background:var(--occ)"></i>Military</span><span><i class="sw" style="background:var(--sky)"></i>Financial</span><span><i class="sw" style="background:var(--wheat)"></i>Humanitarian</span></div>
-    <div class="bars">${AID.map(d => `<div class="bar-row"><span class="lab">${esc(d.d)}</span><span class="track"><i class="fill-r" style="width:${(100 * d.m / max).toFixed(1)}%"></i><i class="fill-s" style="width:${(100 * d.f / max).toFixed(1)}%"></i><i class="fill-w" style="width:${(100 * d.h / max).toFixed(1)}%"></i></span><span class="val">€${tot(d).toFixed(1)}bn</span></div>`).join('')}</div>
+    <div class="bars">${AID.map(d => `<div class="bar-row">${d.ll ? `<button class="lab linkish" data-country="${esc(d.d)}">${esc(d.d)}</button>` : `<span class="lab">${esc(d.d)}</span>`}<span class="track"><i class="fill-r" style="width:${(100 * d.m / max).toFixed(1)}%"></i><i class="fill-s" style="width:${(100 * d.f / max).toFixed(1)}%"></i><i class="fill-w" style="width:${(100 * d.h / max).toFixed(1)}%"></i></span><span class="val">€${tot(d).toFixed(1)}bn</span></div>`).join('')}</div>
     <div class="notice"><b>Norway’s Nansen programme</b> commits at least NOK 274.5 billion for 2023–2030. For 2026 it allocates NOK 85 billion: 70 billion military and 15 billion civilian.</div>
     <div class="meta">In January–April 2026, European military aid averaged about €2 billion a month (Kiel Institute).</div>
     ${srcHTML('aid')}`;
@@ -1003,6 +1095,12 @@ function updateRbar() {
   rb.hidden = state.mode !== 'refugees' || !document.body.classList.contains('fs');
   if (rb.hidden) return;
   rb.querySelectorAll('[data-rv]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.rv === state.rvView)));
+  if (state.rvCountry) {
+    const r = REFUGEES.find(x => x.c === state.rvCountry), d = AID.find(x => x.d === state.rvCountry);
+    const val = state.rvView === 'aid' && d ? `€${(d.m + d.f + d.h).toFixed(1)}bn aid` : r ? `${r.approx ? '≈' : ''}${fmt(r.v)} ${r.other ? 'applied' : 'refugees'}` : d ? `€${(d.m + d.f + d.h).toFixed(1)}bn aid` : '';
+    document.getElementById('rsum').innerHTML = `<span><b>${esc(state.rvCountry)}</b>${esc(val)}</span><button class="btn ghost" data-action="allcountries" style="align-self:center">All of Europe</button>`;
+    return;
+  }
   document.getElementById('rsum').innerHTML = state.rvView === 'refugees'
     ? '<span><b>5.76 M</b>refugees abroad</span><span><b>4.43 M</b>EU protection</span><span><b>3.9 M</b>displaced inside</span>'
     : '<span><b>€190.7bn</b>EU institutions</span><span><b>€119.0bn</b>United States</span><span><b>€24.7bn</b>Norway</span>';
@@ -1436,6 +1534,7 @@ document.querySelector('.modes').addEventListener('click', e => {
   // pressing a view's button again resets it: close any open alert or region and snap the map back
   if (state.focusItem) clearFocus(true);
   if (state.selected && b.dataset.mode === 'regions') setSelected(null, false, true);
+  if (state.rvCountry) clearCountry(true);
   setMode(b.dataset.mode);
 });
 document.querySelector('.modes').addEventListener('keydown', e => {
@@ -1450,6 +1549,8 @@ $('#grip').addEventListener('click', () => {
 });
 panel.addEventListener('transitionend', e => { if (e.propertyName === 'max-height') { placeTbar(); if (mapReady && !isWide()) map.easeTo({padding: padding(), duration: REDUCED ? 0 : 300}); } });
 const onPanelClick = e => {
+  const cty = e.target.closest('[data-country]');
+  if (cty) { zoomCountry(cty.dataset.country); return; }
   const itm = e.target.closest('[data-item]');
   if (itm) { focusItem(itm.dataset.item); return; }
   const reg = e.target.closest('[data-region]');
@@ -1469,6 +1570,7 @@ const onPanelClick = e => {
   else if (a === 'back') setSelected(null, false);
   else if (a === 'unfocus') { clearFocus(); frame('regions'); }
   else if (a === 'allalerts') openMenu();
+  else if (a === 'allcountries') { clearCountry(); frame('refugees'); }
   else if (a === 'frontfor') { setMode('front'); }
   else if (a === 'height') { state.heightBy = v; if (mapReady) { map.setPaintProperty('reg-3d', 'fill-extrusion-height', heightExpr()); applyMode(false); } renderPanel(); }
   else if (a === 'npreset') {
@@ -1482,7 +1584,8 @@ const onPanelClick = e => {
 };
 pbody.addEventListener('click', onPanelClick);
 document.getElementById('tPlay').addEventListener('click', togglePlay);
-document.getElementById('rbar').addEventListener('click', e => { const b = e.target.closest('[data-rv]'); if (b && b.dataset.rv !== state.rvView) { state.rvView = b.dataset.rv; renderPanel(); applyMode(false); } });
+document.getElementById('rbar').addEventListener('click', e => { if (e.target.closest('[data-action="allcountries"]')) { clearCountry(); frame('refugees'); return; } const b = e.target.closest('[data-rv]'); if (b && b.dataset.rv !== state.rvView) { state.rvView = b.dataset.rv; renderPanel(); applyMode(false); } });
+document.getElementById('map').addEventListener('click', e => { const b = e.target.closest('.mlabel.click'); if (b && b.dataset.country) { e.stopPropagation(); zoomCountry(b.dataset.country); } });
 document.getElementById('nPrev').addEventListener('click', () => shiftNight(-1));
 document.getElementById('nNext').addEventListener('click', () => shiftNight(1));
 document.getElementById('nDate').addEventListener('change', e => { if (e.target.value) setNight(e.target.value, state.night.preset === 'before' ? 'corrected' : null); });
