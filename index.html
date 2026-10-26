@@ -163,6 +163,8 @@ body.fs .top{top:64px;right:0}
 .ach{border:1px solid var(--line);background:var(--panel-2);border-radius:999px;padding:5px 10px;font-size:12.5px;cursor:pointer;color:var(--text)}
 .ach:hover{border-color:var(--edge)}
 .chip.blast i{background:#ffb347}
+.trk{display:flex;flex-direction:column;gap:3px;margin-top:10px;font-size:14px;color:var(--text)}
+.trk i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:0}
 .q{margin:0;border-left:3px solid var(--line);padding:4px 0 4px 12px;color:#dfe6f2;display:flex;flex-direction:column;gap:4px}
 .focus-label{border-color:var(--wheat);color:var(--wheat)}
 .tip{position:absolute;z-index:7;pointer-events:none;font-size:12px;padding:6px 9px;border-radius:8px;white-space:nowrap}
@@ -287,7 +289,7 @@ h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02
   <button class="pill glass" id="fsAlerts" data-s="loading" aria-haspopup="dialog" aria-controls="alertMenu" hidden><span class="dot" aria-hidden="true"></span><span class="ptxt">Alerts</span></button>
   <section class="fscard" id="fsCard" aria-label="Alert details" hidden></section>
   <div class="lbar glass" id="lbar" aria-label="Colour key" hidden>
-    <div class="legend"><span><i class="sw" style="background:var(--alert)"></i>Missile level</span><span><i class="sw" style="background:var(--drone)"></i>Drone level</span><span><i class="sw" style="background:var(--alert-soft)"></i>Part of region</span><span><i class="sw" style="background:var(--occ)"></i>Occupied (DeepState)</span><span><i class="ring"></i>District under alert</span><span><i class="sw" style="background:#ffb347;border-radius:50%"></i>Explosions reported</span></div>
+    <div class="legend"><span><i class="sw" style="background:var(--alert)"></i>Missile level</span><span><i class="sw" style="background:var(--drone)"></i>Drone level</span><span><i class="sw" style="background:var(--alert-soft)"></i>Part of region</span><span><i class="sw" style="background:var(--occ)"></i>Occupied (DeepState)</span><span><i class="ring"></i>District under alert</span><span><i class="sw" style="height:0;border-top:2px dashed #ffa53e;border-radius:0"></i>Drone track</span><span><i class="sw" style="height:0;border-top:2px dashed #ff3b3b;border-radius:0"></i>Missile track</span><span><i class="sw" style="background:#ffb347;border-radius:50%"></i>Explosions reported</span></div>
   </div>
   <div class="rbar glass" id="rbar" role="group" aria-label="Refugees or aid" hidden>
     <div class="seg" role="group" aria-label="Show"><button data-rv="refugees">Refugees</button><button data-rv="aid">Aid</button></div>
@@ -628,6 +630,14 @@ function initMap() {
     map.addLayer({id: 'chg-loss-line', type: 'line', source: 'chgLoss', paint: {'line-color': '#a8d1ff', 'line-width': 1.2}});
     map.addLayer({id: 'ffx-ring', type: 'circle', source: 'ffx', paint: {'circle-pitch-alignment': 'map', 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-width': 2, 'circle-radius': 8, 'circle-stroke-color': ['match', ['get', 'side'], 'ua', '#9fd0ff', '#ffb347']}});
     map.addLayer({id: 'ffx-flash', type: 'circle', source: 'ffx', paint: {'circle-color': '#fff1c1', 'circle-blur': 0.7, 'circle-radius': 6, 'circle-opacity': 0.7}});
+    map.addSource('trk', {type: 'geojson', data: fc([])});
+    map.addSource('trkHead', {type: 'geojson', data: fc([])});
+    map.addSource('trkFrom', {type: 'geojson', data: fc([])});
+    map.addLayer({id: 'trk-glow', type: 'line', source: 'trk', filter: ['==', ['geometry-type'], 'LineString'], layout: {'line-cap': 'round'}, paint: {'line-color': ['get', 'c'], 'line-opacity': ['*', 0.28, ['get', 'o']], 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 7, 9, 12], 'line-blur': 4}});
+    map.addLayer({id: 'trk-line', type: 'line', source: 'trk', filter: ['==', ['geometry-type'], 'LineString'], layout: {'line-cap': 'round'}, paint: {'line-color': ['get', 'c'], 'line-opacity': ['get', 'o'], 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 2.4, 9, 3.5], 'line-dasharray': [2.2, 1.1]}});
+    map.addLayer({id: 'trk-arrow', type: 'fill', source: 'trk', filter: ['==', ['geometry-type'], 'Polygon'], paint: {'fill-color': ['get', 'c'], 'fill-opacity': ['get', 'o']}});
+    map.addLayer({id: 'trk-from', type: 'circle', source: 'trkFrom', paint: {'circle-radius': 4, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': ['get', 'c'], 'circle-stroke-width': 1.5}});
+    map.addLayer({id: 'trk-head', type: 'circle', source: 'trkHead', paint: {'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4.5, 9, 7], 'circle-color': ['get', 'c'], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2}});
     map.addSource('live', {type: 'geojson', data: fc([])});
     map.addSource('blastcol', {type: 'geojson', data: fc([])});
     map.addSource('focus', {type: 'geojson', data: fc([])});
@@ -640,6 +650,7 @@ function initMap() {
     map.addLayer({id: 'blast-col', type: 'fill-extrusion', source: 'blastcol', paint: {'fill-extrusion-color': '#ff8c3a', 'fill-extrusion-height': 8000, 'fill-extrusion-base': 0, 'fill-extrusion-opacity': 0.9}});
     map.addLayer({id: 'focus-beacon', type: 'fill-extrusion', source: 'focus', filter: ['==', ['geometry-type'], 'Polygon'], paint: {'fill-extrusion-color': C.wheat, 'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 5, 70000, 9, 9000], 'fill-extrusion-base': 0, 'fill-extrusion-opacity': 0.85}});
 
+    for (const l of ['trk-glow', 'trk-line', 'trk-arrow', 'trk-from', 'trk-head']) map.moveLayer(l);
     buildMarkers();
     buildFlows();
     mapReady = true;
@@ -658,7 +669,7 @@ function initMap() {
         if (state.rvCountry && map.queryRenderedFeatures(e.point, {layers: ['cty-hl']}).length) { toggleCountry(state.rvCountry); return; }
       }
       if (state.mode === 'regions') {
-        const hit = map.queryRenderedFeatures([[e.point.x - 10, e.point.y - 10], [e.point.x + 10, e.point.y + 10]], {layers: ['live-dot', 'blast-flash']})[0];
+        const hit = map.queryRenderedFeatures([[e.point.x - 10, e.point.y - 10], [e.point.x + 10, e.point.y + 10]], {layers: ['trk-head', 'trk-arrow', 'live-dot', 'blast-flash', 'trk-line']})[0];
         if (hit && hit.properties.id) { focusItem(hit.properties.id); return; }
       }
       const f = map.queryRenderedFeatures(e.point, {layers: pick.filter(l => map.getLayoutProperty(l, 'visibility') !== 'none')})[0];
@@ -784,13 +795,13 @@ function labelVisibility() {
 }
 
 const LAYERS = {
-  regions: ['europe-fill', 'neigh-fill', 'europe-line', 'neigh-line', 'reg-3d', 'occ-3d', 'live-pulse', 'live-dot', 'blast-ring', 'blast-flash', 'focus-ring', 'blast-col', 'focus-beacon'],
+  regions: ['europe-fill', 'neigh-fill', 'europe-line', 'neigh-line', 'reg-3d', 'occ-3d', 'live-pulse', 'live-dot', 'blast-ring', 'blast-flash', 'focus-ring', 'blast-col', 'focus-beacon', 'trk-glow', 'trk-line', 'trk-arrow', 'trk-from', 'trk-head'],
   night: ['europe-fill', 'neigh-fill', 'europe-line', 'neigh-line', 'reg-line'],
   front: ['europe-fill', 'neigh-fill', 'europe-line', 'neigh-line', 'reg-fill', 'occ-tint', 'occ-fill', 'chg-gain', 'chg-loss', 'reg-line', 'occ-line', 'chg-gain-line', 'chg-loss-line', 'occ-latest', 'ffx-ring', 'ffx-flash'],
   refugees: ['europe-fill', 'neigh-fill', 'cty-hl', 'europe-line', 'neigh-line', 'cty-hl-line', 'reg-fill', 'reg-line', 'flows', 'dests', 'donors'],
   blacksea: ['europe-fill', 'neigh-fill', 'europe-line', 'neigh-line', 'reg-fill', 'occ-tint', 'occ-fill', 'reg-line', 'occ-line', 'route', 'ports']
 };
-const ALL_LAYERS = ['cty-hl', 'cty-hl-line', 'chg-gain', 'chg-loss', 'chg-gain-line', 'chg-loss-line', 'ffx-ring', 'ffx-flash', 'reg-fill', 'occ-tint', 'occ-fill', 'reg-line', 'occ-line', 'occ-latest', 'reg-3d', 'occ-3d', 'route', 'ports', 'flows', 'dests', 'donors', 'live-pulse', 'live-dot', 'blast-ring', 'blast-flash', 'focus-ring', 'blast-col', 'focus-beacon'];
+const ALL_LAYERS = ['trk-glow', 'trk-line', 'trk-arrow', 'trk-from', 'trk-head', 'cty-hl', 'cty-hl-line', 'chg-gain', 'chg-loss', 'chg-gain-line', 'chg-loss-line', 'ffx-ring', 'ffx-flash', 'reg-fill', 'occ-tint', 'occ-fill', 'reg-line', 'occ-line', 'occ-latest', 'reg-3d', 'occ-3d', 'route', 'ports', 'flows', 'dests', 'donors', 'live-pulse', 'live-dot', 'blast-ring', 'blast-flash', 'focus-ring', 'blast-col', 'focus-beacon'];
 
 function applyMode(animate = true) {
   if (!mapReady) return;
@@ -961,7 +972,7 @@ function liveBlockHTML() {
   else status = `${L.updated ? `Updated ${kyivTime(L.updated)} Kyiv time (${ago(L.updated)})` : 'Updated just now'} · ${esc(L.source || '')}`;
   return `<div class="sec">
     <button class="switch" role="switch" aria-checked="${state.liveOn}" data-action="live"><span><span class="t">Live air-raid alerts</span><span class="s">${status}</span></span><span class="knob" aria-hidden="true"></span></button>
-    <div class="legend"><span><i class="sw" style="background:var(--alert)"></i>Missile level</span><span><i class="sw" style="background:var(--drone)"></i>Drone level</span><span><i class="sw" style="background:var(--alert-soft)"></i>Part of region</span><span><i class="sw" style="background:var(--occ)"></i>Occupied (DeepState)</span></div>
+    <div class="legend"><span><i class="sw" style="background:var(--alert)"></i>Missile level</span><span><i class="sw" style="background:var(--drone)"></i>Drone level</span><span><i class="sw" style="background:var(--alert-soft)"></i>Part of region</span><span><i class="sw" style="background:var(--occ)"></i>Occupied (DeepState)</span><span><i class="sw" style="height:0;border-top:2px dashed #ffa53e;border-radius:0"></i>Drone track</span><span><i class="sw" style="height:0;border-top:2px dashed #ff3b3b;border-radius:0"></i>Missile track</span></div>
     ${L.status === 'error' && state.liveOn ? '<div class="btns"><button class="btn" data-action="retry">Try again</button><a class="btn ghost" href="https://alerts.in.ua/" target="_blank" rel="noopener">Open alerts.in.ua</a></div>' : ''}
   </div>`;
 }
@@ -1245,6 +1256,114 @@ function locateText(text) {
   if (hit.region || hit.g.k === 'kiiv' && false) return {ll: R[hit.g.rid].lab, rid: hit.g.rid, prec: 'region', label: R[hit.g.rid].n};
   return {ll: hit.g.ll, rid: hit.g.rid, prec: 'place', label: hit.g.n};
 }
+/* ---------------- Drone and missile tracks (from Air Force messages) ---------------- */
+const ORIGINS = {bryansk: [34.37, 53.24], kursk: [36.19, 51.73], belgorod: [36.59, 50.6], voronezh: [39.2, 51.66], rostov: [39.7, 47.23], taganrog: [38.9, 47.21], millerovo: [40.4, 48.92], shatalovo: [32.5, 54.33], oryol: [36.07, 52.97], orel: [36.07, 52.97], lipetsk: [39.6, 52.6], primorskoakhtarsk: [38.17, 46.05], yeysk: [38.27, 46.71], chauda: [35.83, 45.0], hvardiiske: [34.02, 45.12], navlia: [34.5, 52.8], blacksea: [31.2, 45.0], seaofazov: [36.6, 46.2], azov: [36.6, 46.2], crimea: [34.1, 45.3], belarus: [28.0, 52.6], russia: [38.5, 51.8], caspian: [49.5, 43.0]};
+const DIRS = {north: [0, 1], south: [0, -1], east: [1, 0], west: [-1, 0], northeast: [0.7, 0.7], northwest: [-0.7, 0.7], southeast: [0.7, -0.7], southwest: [-0.7, -0.7]};
+const REGION_BY_NAME = (() => { const m = {}; for (const id in R) { m[norm(R[id].n.replace(/ Oblast$/, '').replace('Autonomous Republic of ', ''))] = id; } m[norm('Kyiv region')] = 'UA-32'; m['zaporizhia'] = 'UA-23'; m['odessa'] = 'UA-51'; return m; })();
+const TRACK_TYPE = (what, text) => {
+  const s = (what + ' ' + text).toLowerCase();
+  if (/ballistic|iskander|kinzhal/.test(s)) return {k: 'ballistic', label: 'Ballistic missile', color: '#ff3b3b'};
+  if (/missile|cruise|kalibr|kh-/.test(s)) return {k: 'missile', label: 'Missile', color: '#ff5a5f'};
+  if (/bomb|kab/.test(s)) return {k: 'bomb', label: 'Guided bombs', color: '#ff7a59'};
+  if (/jet/.test(s)) return {k: 'jet', label: 'Jet-powered drone', color: '#ffa53e'};
+  return {k: 'drone', label: 'Attack drone', color: '#ffc04d'};
+};
+function namedPlace(name, isRegion) {
+  const k = norm(name);
+  if (!k) return null;
+  if (isRegion || /oblast$/.test(k)) { const kk = k.replace(/oblast$/, ''); const id = kk === 'kiiv' ? 'UA-32' : REGION_BY_NAME[kk]; if (id) return {ll: R[id].lab, label: R[id].n, rid: id, region: true}; }
+  for (const o in ORIGINS) if (k === o || k.startsWith(o)) return {ll: ORIGINS[o], label: cap1(name.trim()), rid: null, foreign: true};
+  const g = lookup(name, null);
+  if (g) return {ll: g.ll, label: g.n, rid: g.rid};
+  const id = REGION_BY_NAME[k]; if (id) return {ll: R[id].lab, label: R[id].n, rid: id, region: true};
+  return null;
+}
+const NAME = "([A-Z][A-Za-z'’\\-]+(?:[ \\-](?:[A-Z][A-Za-z'’\\-]+|Sea|of|on))*)";
+function parseTrack(text) {
+  const tx = String(text).replace(/[^\x20-\x7E’]/g, ' ').replace(/\s+/g, ' ').replace(/n\.p\.\s*/gi, '');
+  let to = null, from = null, toDir = null, fromDir = null, m;
+  if ((m = tx.match(new RegExp('(?:toward|towards|heading to|heading on|course on|in the direction of|drones? on|drone to|UAVs? to|missiles? to)\\s+(?:the\\s+)?' + NAME + '(\\s+(?:region|oblast))?'))) && !/^(North|South|East|West|Northeast|Northwest|Southeast|Southwest)$/i.test(m[1])) to = namedPlace(m[1], !!m[2]);
+  if ((m = tx.match(/(?:toward|towards|heading)\s+(?:the\s+)?(north|south|east|west|north-?east|north-?west|south-?east|south-?west)\b/i))) toDir = m[1].toLowerCase().replace('-', '');
+  if ((m = tx.match(/from\s+the\s+(north|south|east|west|north-?east|north-?west|south-?east|south-?west)\b/i))) fromDir = m[1].toLowerCase().replace('-', '');
+  else if ((m = tx.match(/from the waters of the Black Sea/i))) from = {ll: ORIGINS.blacksea, label: 'Black Sea', foreign: true};
+  else if ((m = tx.match(new RegExp('(?:from|in|over)\\s+(?:the\\s+)?' + NAME + '(\\s+(?:region|oblast))?')))) from = namedPlace(m[1], !!m[2]);
+  if (from && to && Math.abs(from.ll[0] - to.ll[0]) < 1e-6 && Math.abs(from.ll[1] - to.ll[1]) < 1e-6) from = null;
+  const sameCourse = /same course/i.test(tx);
+  return {to, from, toDir, fromDir, sameCourse};
+}
+const offsetLL = (ll, dir, km) => { const d = DIRS[dir]; if (!d) return null; return [ll[0] + d[0] * km / (111.32 * Math.cos(ll[1] * Math.PI / 180)), ll[1] + d[1] * km / 111.32]; };
+function buildTracks(items) {
+  const tracks = [], last = {};
+  // oldest first so "same course" can reuse the previous one
+  const threats = items.filter(x => (x.kind === 'threat' || x.kind === 'message') && x.text && (x.age == null || x.age <= 60)).sort((a, b) => (b.age ?? 0) - (a.age ?? 0));
+  const seen = new Set();
+  for (const it of threats) {
+    const ty = TRACK_TYPE(it.title || '', it.text);
+    const p = parseTrack(it.text);
+    if (p.sameCourse && last[ty.k]) { p.to = p.to || last[ty.k].to; p.from = p.from || last[ty.k].from; }
+    let at = it.kind === 'threat' && it.ll && it.prec === 'place' ? {ll: it.ll, label: cleanName(it.placeName || '')} : null;
+    let to = p.to, from = p.from;
+    if (!to && p.toDir && (at || from)) to = {ll: offsetLL((at || from).ll, p.toDir, 70), label: 'heading ' + p.toDir, dirOnly: true};
+    if (!from && p.fromDir && to && !to.dirOnly) from = {ll: offsetLL(to.ll, p.fromDir, 80), label: 'the ' + p.fromDir, dirOnly: true};
+    if (!to) continue;
+    if (at && to && Math.hypot(at.ll[0] - to.ll[0], at.ll[1] - to.ll[1]) < 0.05) at = null;
+    const pts = [from && from.ll, at && at.ll, to.ll].filter(Boolean);
+    if (pts.length < 2) continue;
+    const key = ty.k + '|' + (it.time || '') + '|' + norm(it.text).slice(0, 60);
+    const prev = tracks.find(x => x.key === key);
+    if (prev) { if (!prev.at && at) { prev.at = at; prev.pts = pts; } it.track = prev; continue; }
+    const key2 = ty.k + '|' + pts.map(q => q.map(v => v.toFixed(1)).join(',')).join(';');
+    if (seen.has(key2)) continue;
+    seen.add(key2);
+    last[ty.k] = {to, from};
+    const tr = {key, id: 'k' + tracks.length, item: it.id, ty, time: it.time, age: it.age ?? 0, from, at, to, pts, text: it.text};
+    tracks.push(tr);
+    it.track = tr;
+  }
+  return tracks;
+}
+function arrowHead(a, b, km) {
+  const lat = b[1], kx = 111.32 * Math.cos(lat * Math.PI / 180), ky = 111.32;
+  const dx = (b[0] - a[0]) * kx, dy = (b[1] - a[1]) * ky, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+  const back = [b[0] - ux * km / kx, b[1] - uy * km / ky], w = km * 0.55;
+  return [[b[0], b[1]], [back[0] - uy * w / kx, back[1] + ux * w / ky], [back[0] + uy * w / kx, back[1] - ux * w / ky], [b[0], b[1]]];
+}
+function smoothPath(pts) {
+  // gently bend each leg so stacked tracks stay readable
+  const out = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const seg = curve(pts[i], pts[i + 1], 0.08, 24);
+    out.push(...(i ? seg.slice(1) : seg));
+  }
+  return out;
+}
+function updateTracks() {
+  if (!mapReady) return;
+  const tracks = state.liveOn ? (state.tracks || []) : [];
+  const lines = [], heads = [], marks = [];
+  for (const t of tracks) {
+    const path = smoothPath(t.pts), fade = Math.max(0.35, 1 - t.age / 60);
+    t.path = path;
+    lines.push(featureOf({type: 'LineString', coordinates: path}, {c: t.ty.color, o: fade, id: t.item}));
+    lines.push(featureOf({type: 'Polygon', coordinates: [arrowHead(path[path.length - 3] || path[0], path[path.length - 1], t.ty.k === 'ballistic' || t.ty.k === 'missile' ? 22 : 16)]}, {c: t.ty.color, o: fade, id: t.item, head: 1}));
+    if (t.from && !t.from.dirOnly) marks.push(featureOf({type: 'Point', coordinates: t.from.ll}, {c: t.ty.color, k: 'from', id: t.item}));
+  }
+  state.trackPaths = tracks.map(t => ({path: t.path, c: t.ty.color, id: t.item, spd: t.ty.k === 'ballistic' ? 1700 : t.ty.k === 'missile' ? 2600 : 4200, ph: Math.random()}));
+  map.getSource('trk').setData(fc(lines));
+  map.getSource('trkFrom').setData(fc(marks));
+  moveHeads(performance.now());
+  startFx();
+}
+function moveHeads(ts) {
+  if (!mapReady || !state.trackPaths) return;
+  const feats = state.trackPaths.map(t => {
+    const f = ((ts / t.spd) + t.ph) % 1, n = t.path.length - 1, x = f * n, i = Math.min(n - 1, Math.floor(x)), r = x - i;
+    const a = t.path[i], b = t.path[i + 1];
+    return featureOf({type: 'Point', coordinates: [a[0] + (b[0] - a[0]) * r, a[1] + (b[1] - a[1]) * r]}, {c: t.c, id: t.id});
+  });
+  map.getSource('trkHead').setData(fc(feats));
+}
+
 const stripMd = s => String(s).replace(/\*\*/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\s+/g, ' ').trim();
 const pair = s => { const m = String(s).trim().match(/^(.*?)\s*\(([^()]*)\)\s*$/); return m ? {lat: m[1].trim(), uk: m[2].trim()} : {lat: String(s).trim(), uk: ''}; };
 function sectionOf(md, n) { const s = md.split(/^##\s+/m).find(x => new RegExp('^' + n + '\\.\\s').test(x)); return s ? s.replace(/^[^\n]*\n/, '') : ''; }
@@ -1266,7 +1385,7 @@ function parseFeed(md) {
   }
   for (const l of sectionOf(md, 4).split('\n')) {
     const m = l.match(/^\s*-\s*\*\*(\d{1,2}:\d{2})\s*—\s*([^*]+?)\*\*\s*(?:over|near|in|at)?\s*(.*?)(?:\s+—\s+(.*))?$/);
-    if (m) F.threats.push({time: m[1], what: m[2].trim(), place: pair(stripMd(m[3])), text: stripMd(m[4] || '')});
+    if (m) { const places = stripMd(m[3]).split(/\),\s*|\)\s+and\s+/).map(x => pair(/\)$/.test(x.trim()) ? x : x + ')')).filter(x => x.lat); F.threats.push({time: m[1], what: m[2].trim(), place: places[places.length - 1] || pair(stripMd(m[3])), places, text: stripMd(m[4] || '')}); }
   }
   for (const l of sectionOf(md, 5).split('\n')) {
     if (!/^\s*-\s/.test(l)) continue;
@@ -1317,6 +1436,7 @@ function buildLiveItems() {
     items.push({id: 'm' + i, kind: blast ? 'blast' : 'message', ttype: ty, level: blast ? 'red' : ty.lv, time: t.time, age: age(t.time), title: blast ? 'Explosions reported' : (t.who || 'Air Force message'), who: t.who, url: t.url, text: t.text, ll: loc && loc.ll, rid: loc && loc.rid, prec: loc ? loc.prec : null, pin: false});
   });
   F.ended.forEach((t, i) => items.push({id: 'e' + i, kind: 'ended', time: t.range, title: t.text, dur: t.dur, pin: false}));
+  state.tracks = buildTracks(items);
   // the same explosion report often appears as a tracked threat and as an Air Force message: keep one
   const dkey = x => (x.time || '') + '|' + norm(x.text || '').slice(0, 40);
   const firstByKey = new Map();
@@ -1352,12 +1472,13 @@ function updateLivePins() {
   state.pins = {area: pts.filter(f => f.properties.t === 'area').length, blast: cols.length};
   map.getSource('live').setData(fc(pts));
   map.getSource('blastcol').setData(fc(cols));
+  updateTracks();
   startFx();
 }
 
 /* animation */
 let rafId = 0, lastFx = 0;
-const fxNeeded = () => mapReady && document.visibilityState === 'visible' && ((state.mode === 'front' && state.frontFx > 0) || (state.mode === 'regions' && state.liveOn && ((state.pins && (state.pins.area || state.pins.blast)) || state.focusItem)));
+const fxNeeded = () => mapReady && document.visibilityState === 'visible' && ((state.mode === 'front' && state.frontFx > 0) || (state.mode === 'regions' && state.liveOn && ((state.pins && (state.pins.area || state.pins.blast)) || state.focusItem || (state.trackPaths && state.trackPaths.length))));
 function setFx(ts) {
   const t = (ts % 2200) / 2200, tb = (ts % 2600) / 2600, tf = (ts % 1800) / 1800;
   const P = ['%', ['+', t, ['get', 'ph']], 1], Q = ['%', ['+', tb, ['get', 'ph']], 1];
@@ -1380,6 +1501,7 @@ function setFx(ts) {
     map.setPaintProperty('ffx-flash', 'circle-opacity', ['max', 0, ['-', 0.95, ['*', 3.5, Q]]]);
     return;
   }
+  moveHeads(ts);
   map.setPaintProperty('focus-ring', 'circle-radius', ['+', 10, ['*', 28 * tf, 1]]);
   map.setPaintProperty('focus-ring', 'circle-stroke-opacity', 1 - tf);
 }
@@ -1412,9 +1534,16 @@ function focusItem(id) {
     const el = document.createElement('div'); el.className = 'mlabel focus-label';
     el.textContent = it.kind === 'alert' ? it.title : it.prec === 'place' ? (it.placeName ? cleanName(it.placeName) : it.title) : R[it.rid].n;
     focusMarker = new maplibregl.Marker({element: el, anchor: 'bottom', offset: [0, -16]}).setLngLat(it.ll).addTo(map);
-    const z = it.rid === 'UA-30' && it.prec === 'place' ? 9.6 : it.prec === 'place' ? 8.4 : 6.6;
-    const o = {center: it.ll, zoom: z, pitch: 55, bearing: map.getBearing(), padding: padding()};
-    REDUCED ? map.jumpTo(o) : map.flyTo({...o, duration: 1700, essential: true});
+    if (it.track && it.track.pts.length > 1) {
+      const xs = it.track.pts.map(q => q[0]), ys = it.track.pts.map(q => q[1]);
+      map.setPadding({top: 0, bottom: 0, left: 0, right: 0});
+      const cam = map.cameraForBounds([[Math.min(...xs) - 0.3, Math.min(...ys) - 0.3], [Math.max(...xs) + 0.3, Math.max(...ys) + 0.3]], {padding: padding(), maxZoom: 8.5});
+      if (cam) { const o = {center: cam.center, zoom: cam.zoom, pitch: 30, bearing: 0}; REDUCED ? map.jumpTo(o) : map.flyTo({...o, duration: 1500, essential: true}); }
+    } else {
+      const z = it.rid === 'UA-30' && it.prec === 'place' ? 9.6 : it.prec === 'place' ? 8.4 : 6.6;
+      const o = {center: it.ll, zoom: z, pitch: 55, bearing: map.getBearing(), padding: padding()};
+      REDUCED ? map.jumpTo(o) : map.flyTo({...o, duration: 1700, essential: true});
+    }
   }
   renderPanel();
   pbody.scrollTop = 0;
@@ -1440,6 +1569,10 @@ function panelFocus() {
   if (it.kind === 'alert' && it.sub === 'area') story = `An air-raid alert covers ${esc(it.title)} in ${esc(rn)}${it.time ? ` since ${esc(it.time)} Kyiv time` : ''}. ${it.level === 'red' ? 'The alert level points to a missile or mass-strike threat.' : 'The alert level points to a drone threat.'}`;
   else if (it.kind === 'alert') story = `${esc(it.what || 'An air-raid alert')} ${it.areas && it.areas.length ? `covers ${it.areas.length} part${it.areas.length === 1 ? '' : 's'} of` : 'covers the whole of'} ${esc(rn)}${it.time ? ` since ${esc(it.time)} Kyiv time` : ''}.`;
   else if (it.kind === 'threat') story = `${esc(it.title)} tracked over ${esc(cleanName(it.placeName || rn))} at ${esc(it.time)} Kyiv time.`;
+  if (it.track) {
+    const t = it.track, exp = state.items.find(x => x.kind === 'blast' && x.ll && Math.hypot(x.ll[0] - t.to.ll[0], x.ll[1] - t.to.ll[1]) < 0.6);
+    story += `<span class="trk"><span><i style="background:${t.ty.color}"></i><b>${esc(t.ty.label)}</b></span>${t.from ? `<span>From: ${esc(t.from.label)}</span>` : ''}${t.at && t.at.label ? `<span>Spotted over: ${esc(t.at.label)}</span>` : ''}<span>Heading: ${esc(t.to.dirOnly ? t.to.label : 'toward ' + t.to.label)}</span>${exp ? `<span>Explosions reported in ${esc(cleanName(exp.placeName || (exp.rid ? R[exp.rid].n : '')))} at ${esc(exp.time)}</span>` : ''}</span>`;
+  }
   else story = `Reported at ${esc(it.time || '')} Kyiv time.`;
   const quote = it.text && it.kind !== 'alert' ? `<blockquote class="q">${esc(it.text)}${it.url ? ` <a href="${esc(it.url)}" target="_blank" rel="noopener">Source</a>` : ''}<span class="meta">Ukrainian Air Force, via alerts.in.ua</span></blockquote>` : '';
   const areaChips = it.areas && it.areas.length ? `<div class="sec"><h3>Areas under alert</h3><div class="chips">${it.areas.map(a => `<button class="ach" data-item="${a.id}">${esc(cleanName(a.lat))}</button>`).join('')}</div></div>` : '';
@@ -1459,7 +1592,7 @@ function menuItem(x) {
   const dot = x.kind === 'blast' ? 'blast' : x.level || '';
   const can = !!x.ll;
   const title = x.kind === 'threat' ? `${x.title}` : x.kind === 'alert' ? x.title : x.kind === 'blast' ? 'Explosions reported' : x.kind === 'ended' ? x.title : (x.who || 'Air Force');
-  const sub = x.kind === 'threat' ? `${cleanName(x.placeName || '')}${x.text ? ' · ' + x.text : ''}` : x.kind === 'alert' ? `${levelText(x.level)}${x.areas && x.areas.length ? ` · ${x.areas.length} area${x.areas.length === 1 ? '' : 's'}` : ' · whole region'}` : x.kind === 'ended' ? x.dur : x.text;
+  const sub = x.kind === 'threat' ? `${x.track ? '→ ' + (x.track.to.dirOnly ? x.track.to.label : x.track.to.label) + ' · ' : ''}${cleanName(x.placeName || '')}${x.text ? ' · ' + x.text : ''}` : x.kind === 'alert' ? `${levelText(x.level)}${x.areas && x.areas.length ? ` · ${x.areas.length} area${x.areas.length === 1 ? '' : 's'}` : ' · whole region'}` : x.kind === 'ended' ? x.dur : x.text;
   const tm = x.kind === 'alert' && x.time ? String(x.time).replace(/^[A-Z][a-z]{2} \d{1,2}, /, m => m.replace(/, $/, '') + ' ') : (x.time || '');
   const inner = `<span class="mt">${esc(tm)}</span><span class="mx"><b>${dot ? `<i class="lv ${dot}"></i>` : ''}${esc(title)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</span>${can ? '<span class="go" aria-hidden="true">›</span>' : '<span></span>'}`;
   return can ? `<button class="mi" data-item="${x.id}">${inner}</button>` : `<div class="mi static">${inner}</div>`;
@@ -1475,7 +1608,7 @@ function renderMenu() {
     const sec = (h, arr, fn = menuItem) => arr.length ? `<div class="msec"><div class="mh">${h}</div>${arr.map(fn).join('')}</div>` : '';
     body = sec('Explosions reported', blasts)
       + sec(`Active alerts · ${alerts.length} region${alerts.length === 1 ? '' : 's'}`, alerts, x => menuItem(x) + (x.areas.length ? `<div class="chips mchips">${x.areas.map(a => `<button class="ach" data-item="${a.id}">${esc(cleanName(a.lat))}</button>`).join('')}</div>` : ''))
-      + sec('Drones and bombs tracked', threats)
+      + sec('Drones and missiles tracked', threats)
       + sec('Air Force messages', msgs)
       + sec('Ended recently', ended);
     if (!alerts.length && !threats.length && !blasts.length) body = '<p class="lead">No active regional alerts right now.</p>' + body;
