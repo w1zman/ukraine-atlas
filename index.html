@@ -36,6 +36,7 @@ a{color:var(--sky)}
 .maplibregl-map{overflow:hidden;position:relative;-webkit-tap-highlight-color:rgba(0,0,0,0)}
 .maplibregl-canvas{position:absolute;left:0;top:0}
 .maplibregl-canvas-container.maplibregl-interactive{cursor:grab}
+#map.locked .maplibregl-canvas-container.maplibregl-interactive{cursor:default}
 .maplibregl-canvas-container.maplibregl-interactive:active{cursor:grabbing}
 .maplibregl-canvas-container.maplibregl-touch-zoom-rotate,.maplibregl-canvas-container.maplibregl-touch-drag-pan{touch-action:none}
 .maplibregl-marker{position:absolute;left:0;top:0;will-change:transform}
@@ -478,6 +479,12 @@ function frame(mode, animate = true) {
   if (animate && !REDUCED) map.flyTo({...opts, duration: 1300, essential: true}); else map.jumpTo(opts);
 }
 
+const HANDLERS = ['dragPan', 'scrollZoom', 'boxZoom', 'dragRotate', 'keyboard', 'doubleClickZoom', 'touchZoomRotate', 'touchPitch'];
+function setInteractive(on) {
+  if (!map) return;
+  for (const h of HANDLERS) { const x = map[h]; if (x) on ? x.enable() : x.disable(); }
+  document.getElementById('map').classList.toggle('locked', !on);
+}
 function featureOf(geom, props = {}) { return {type: 'Feature', properties: props, geometry: geom}; }
 function fc(features) { return {type: 'FeatureCollection', features}; }
 function hatchImage(color) {
@@ -567,6 +574,7 @@ function initMap() {
     applyAlerts();
     if (state.selected) setSelected(state.selected, false);
     updateLivePins();
+    setInteractive(document.body.classList.contains('fs'));
 
     const pick = ['reg-3d', 'reg-fill'];
     map.on('click', e => {
@@ -807,7 +815,7 @@ function panelRegions() {
       <p class="disclaimer">Population figures are official estimates from before the full-scale invasion; millions have since moved.</p>`;
   }
   return `<div><div class="eyebrow">27 regions · 24 oblasts, Crimea, Kyiv, Sevastopol</div><h2>Regions of Ukraine</h2></div>
-    <p class="lead">Tap a region for its capital, population and story. Drag with two fingers to tilt and turn the map.</p>
+    <p class="lead">Tap a region for its capital, population and story. Open full screen to move, zoom and tilt the map.</p>
     ${liveBlockHTML()}
     <div class="sec"><h3>Block height</h3><div class="seg" role="group" aria-label="Block height">
       <button data-action="height" data-v="flat" aria-pressed="${state.heightBy === 'flat'}">Same for all</button>
@@ -1378,7 +1386,16 @@ function setFullscreen(on) {
     if (!on && fsEl()) { const x = (document.exitFullscreen || document.webkitExitFullscreen); if (x) { const pr = x.call(document); if (pr && pr.catch) pr.catch(() => {}); } }
   } catch (e) { /* the map-only view still works without browser full screen */ }
   (on ? $('#fsClose') : $('#fsOpen')).focus();
-  if (mapReady) setTimeout(() => { map.resize(); frame(state.mode, false); }, 120);
+  if (mapReady) {
+    setInteractive(on);
+    setTimeout(() => {
+      map.resize();
+      const f = state.mode === 'regions' && state.focusItem;
+      if (f) { const o = {center: f.ll, padding: padding()}; REDUCED || !on ? map.jumpTo(o) : map.easeTo({...o, duration: 500}); }
+      else if (!on) frame(state.mode, !REDUCED);
+      else map.easeTo({padding: padding(), duration: 0});
+    }, 120);
+  }
 }
 $('#fsOpen').addEventListener('click', () => setFullscreen(true));
 $('#fsClose').addEventListener('click', () => setFullscreen(false));
